@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="start"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:maxWidth="280dp"
+        android:orientation="vertical"
+        android:layout_marginEnd="48dp">
+
+        <!-- Message bubble -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_message_ai"
+            android:padding="12dp"
+            android:orientation="vertical">
+
+            <!-- AI Icon/Badge (optional) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🤖 AI Expert"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#666666"
+                android:layout_marginBottom="4dp" />
+
+            <!-- Message text -->
+            <TextView
+                android:id="@+id/tvMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#000000"
+                android:textSize="14sp"
+                android:lineSpacingExtra="2dp" />
+
+        </LinearLayout>
+
+        <!-- Save button (shown below message) -->
+        <Button
+            android:id="@+id/btnSaveResponse"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="💾 Save to Diagnosis"
+            android:textSize="15sp"
+            android:textAllCaps="false"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:layout_marginTop="6dp"
+            android:backgroundTint="@color/teal"
+            android:textColor="#FFFFFF"
+            android:visibility="gone"
+            style="?attr/materialButtonOutlinedStyle" />
+
+    </LinearLayout>
+
+</LinearLayout>

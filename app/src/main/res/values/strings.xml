@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">GrowMate</string>
+    <string name="open">Open Drawer</string>
+    <string name="close">Close Drawer</string>
+    <string name="default_web_client_id">1023576936631-26f1ocupi9qav1pphna2vebfsu807a50.apps.googleusercontent.com</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+</resources>
