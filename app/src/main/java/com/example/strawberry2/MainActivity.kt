@@ -167,6 +167,11 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(this, MainActivity::class.java))
                     }
                 }
+                R.id.nav_plant -> {
+                    if (currentActivity != "Plant") {
+                        startActivity(Intent(this, Plant::class.java))
+                    }
+                }
                 R.id.nav_about -> {
                     if (currentActivity != "AboutActivity") {
                         startActivity(Intent(this, MainActivity::class.java))

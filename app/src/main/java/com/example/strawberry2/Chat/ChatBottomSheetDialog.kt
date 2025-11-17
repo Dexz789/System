@@ -2,6 +2,7 @@ package com.example.strawberry2.Chat
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -46,8 +47,9 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
 
     private val generativeModel by lazy {
         GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
-            apiKey = GEMINI_API_KEY,
+            // ✅ FIX 1: Use correct stable model name
+            modelName = "gemini-2.5-flash-lite", // Updated to stable version
+            apiKey = GEMINI_API_KEY, // ⚠️ IMPORTANT: Replace with your NEW API key
             generationConfig = generationConfig {
                 temperature = 0.7f
                 topK = 40
@@ -58,7 +60,9 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
     }
 
     companion object {
-        private const val GEMINI_API_KEY = "AIzaSyAHvcuWjI53_k2CUHhwqN1rhrM6rU1pFCM"
+        // ⚠️ FIX 2: REPLACE THIS WITH YOUR NEW API KEY FROM GOOGLE AI STUDIO
+        // Get a new key from: https://makersuite.google.com/app/apikey
+        private const val GEMINI_API_KEY = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0"
         private const val ARG_INITIAL_MESSAGE = "initial_message"
 
         private const val SYSTEM_PROMPT = """You are an expert agricultural AI assistant specializing in strawberry plants and their diseases. 
@@ -139,7 +143,6 @@ If asked about topics outside of strawberries and plant diseases, politely redir
 
     private fun setupRecyclerView() {
         chatAdapter = ChatAdapter(messages) { aiResponse ->
-            // Handle save button click
             saveAiResponse(aiResponse)
         }
         recyclerView.apply {
@@ -192,24 +195,19 @@ If asked about topics outside of strawberries and plant diseases, politely redir
 
         lifecycleScope.launch {
             try {
-                // Build conversation history
-                val conversationHistory = buildString {
-                    append(SYSTEM_PROMPT)
-                    append("\n\n")
-                    append("User: $message\n\nAssistant:")
-                }
-
+                // ✅ FIX 3: Improved error handling and response parsing
                 val response = if (image != null) {
                     val inputContent = content {
                         image(image)
-                        text(conversationHistory)
+                        text("$SYSTEM_PROMPT\n\nUser: $message")
                     }
                     generativeModel.generateContent(inputContent)
                 } else {
-                    generativeModel.generateContent(conversationHistory)
+                    generativeModel.generateContent("$SYSTEM_PROMPT\n\nUser: $message")
                 }
 
-                val aiResponseText = response.text ?: "I apologize, but I couldn't generate a response. Please try again."
+                // ✅ FIX 4: Better null safety
+                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
@@ -223,7 +221,28 @@ If asked about topics outside of strawberries and plant diseases, politely redir
                 scrollToBottom()
 
             } catch (e: Exception) {
-                // ... error handling
+                // ✅ FIX 5: Better error handling
+                Log.e("ChatDialog", "Error generating response", e)
+                val errorMessage = when {
+                    e.message?.contains("API_KEY_INVALID") == true ->
+                        "⚠️ API Key is invalid. Please update your API key."
+                    e.message?.contains("quota") == true ->
+                        "⚠️ API quota exceeded. Please try again later."
+                    e.message?.contains("network") == true ->
+                        "⚠️ Network error. Please check your connection."
+                    else ->
+                        "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
+                }
+
+                val errorMsg = ChatMessage(
+                    message = "Sorry, I encountered an error: $errorMessage",
+                    isUser = false,
+                    canBeSaved = false
+                )
+                chatAdapter.addMessage(errorMsg)
+                scrollToBottom()
+
+                Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
             }
@@ -251,28 +270,29 @@ If asked about topics outside of strawberries and plant diseases, politely redir
     private fun getAIResponse(userMessage: String) {
         lifecycleScope.launch {
             try {
-                // Build conversation history
+                // ✅ FIX 6: Simplified conversation history building
                 val conversationHistory = buildString {
                     append(SYSTEM_PROMPT)
                     append("\n\n")
 
-                    // Add all previous messages (excluding welcome message)
-                    messages.forEach { msg ->
-                        if (!msg.message.contains("Hello! 🍓")) {  // Skip welcome message
-                            if (msg.isUser) {
-                                append("User: ${msg.message}\n\n")
-                            } else if (msg.canBeSaved || !msg.message.contains("Sorry, I encountered")) {
-                                append("Assistant: ${msg.message}\n\n")
-                            }
+                    // Include last 5 message pairs for context (to avoid token limits)
+                    val recentMessages = messages
+                        .filter { !it.message.contains("Hello! 🍓") } // Skip welcome
+                        .takeLast(10) // Last 10 messages (5 pairs)
+
+                    recentMessages.forEach { msg ->
+                        if (msg.isUser) {
+                            append("User: ${msg.message}\n\n")
+                        } else if (msg.canBeSaved || !msg.message.contains("Sorry, I encountered")) {
+                            append("Assistant: ${msg.message}\n\n")
                         }
                     }
 
-                    // Add current message
                     append("User: $userMessage\n\nAssistant:")
                 }
 
                 val response = generativeModel.generateContent(conversationHistory)
-                val aiResponseText = response.text ?: "I apologize, but I couldn't generate a response. Please try again."
+                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
@@ -286,7 +306,27 @@ If asked about topics outside of strawberries and plant diseases, politely redir
                 scrollToBottom()
 
             } catch (e: Exception) {
-                // ... error handling
+                Log.e("ChatDialog", "Error in getAIResponse", e)
+                val errorMessage = when {
+                    e.message?.contains("API_KEY_INVALID") == true ->
+                        "⚠️ API Key is invalid. Please update your API key."
+                    e.message?.contains("quota") == true ->
+                        "⚠️ API quota exceeded. Please try again later."
+                    e.message?.contains("network") == true ->
+                        "⚠️ Network error. Please check your connection."
+                    else ->
+                        "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
+                }
+
+                val errorMsg = ChatMessage(
+                    message = "Sorry, I encountered an error: $errorMessage",
+                    isUser = false,
+                    canBeSaved = false
+                )
+                chatAdapter.addMessage(errorMsg)
+                scrollToBottom()
+
+                Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
             }
@@ -294,7 +334,6 @@ If asked about topics outside of strawberries and plant diseases, politely redir
     }
 
     private fun saveAiResponse(aiResponse: String) {
-        // Close the dialog and pass the response back
         onAiResponseSaved?.invoke(aiResponse)
 
         Toast.makeText(

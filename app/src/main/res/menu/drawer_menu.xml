@@ -14,6 +14,11 @@
             android:icon="@android:drawable/ic_menu_recent_history" />
 
         <item
+            android:id="@+id/nav_plant"
+            android:title="Strawberry Plant Guide"
+            android:icon="@drawable/potted_plant" />
+
+        <item
             android:id="@+id/nav_settings"
             android:title="Settings"
             android:icon="@android:drawable/ic_menu_manage" />
