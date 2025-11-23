@@ -35,6 +35,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.os.postDelayed
 import androidx.core.view.GravityCompat
@@ -57,9 +58,7 @@ import kotlin.math.min
 class MainActivity : AppCompatActivity() {
     private var aiInsightsText: String? = null
     private lateinit var fabChat: ExtendedFloatingActionButton
-
     private lateinit var navHeaderView: View
-
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var toggle: ActionBarDrawerToggle
     private lateinit var detector: ObjectDetector
@@ -68,6 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResults: TextView
     private lateinit var auth: FirebaseAuth
     private lateinit var diagnosisRepository: DiagnosisRepository
+
+    private lateinit var guide: CardView
 
     private var selectedBitmap: Bitmap? = null
     private var currentDetections: List<ObjectDetector.Detection>? = null
@@ -167,11 +168,7 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(this, MainActivity::class.java))
                     }
                 }
-                R.id.nav_plant -> {
-                    if (currentActivity != "Plant") {
-                        startActivity(Intent(this, Plant::class.java))
-                    }
-                }
+
                 R.id.nav_about -> {
                     if (currentActivity != "AboutActivity") {
                         startActivity(Intent(this, MainActivity::class.java))
@@ -210,6 +207,8 @@ class MainActivity : AppCompatActivity() {
         imageView = findViewById(R.id.imageView)
         btnSelectImage = findViewById(R.id.cardSelectImage)
         tvResults = findViewById(R.id.tvResults)
+        guide = findViewById(R.id.cardStrawberryGuide)
+
 
         // Initialize detector
         try {
@@ -244,6 +243,11 @@ class MainActivity : AppCompatActivity() {
         fabChat.setOnClickListener {
             openChatDialog()
         }
+        guide.setOnClickListener {
+            val intent = Intent(this, Plant::class.java)
+            startActivity(intent)
+        }
+
 
         // Set click listener for FAB
         fabChat.setOnTouchListener(object : View.OnTouchListener {
