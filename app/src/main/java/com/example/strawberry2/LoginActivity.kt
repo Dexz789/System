@@ -3,12 +3,15 @@ package com.example.strawberry2
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.strawberry2.Otp.EmailService
+import com.example.strawberry2.Otp.LoginOtpVerificationActivity
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -26,6 +29,10 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
 
+    companion object {
+        private const val TAG = "LoginActivity"
+    }
+
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -41,7 +48,7 @@ class LoginActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
             binding.btnGoogleSignIn.isEnabled = true
-            binding.progressBar.visibility = android.view.View.GONE
+            binding.progressBar.visibility = View.GONE
         }
     }
 
@@ -90,7 +97,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun signInWithGoogle() {
         binding.btnGoogleSignIn.isEnabled = false
-        binding.progressBar.visibility = android.view.View.VISIBLE
+        binding.progressBar.visibility = View.VISIBLE
 
         val signInIntent = googleSignInClient.signInIntent
         googleSignInLauncher.launch(signInIntent)
@@ -125,26 +132,28 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        // Show loading
-        binding.btnEmailSignIn.isEnabled = false
-        binding.progressBar.visibility = android.view.View.VISIBLE
+        // Verify credentials first, then send OTP
+        verifyCredentialsAndSendOtp(email, password)
+    }
 
-        // Sign in with Firebase
+    private fun verifyCredentialsAndSendOtp(email: String, password: String) {
+        binding.btnEmailSignIn.isEnabled = false
+        binding.progressBar.visibility = View.VISIBLE
+
+        // First verify that credentials are correct
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
-                binding.btnEmailSignIn.isEnabled = true
-                binding.progressBar.visibility = android.view.View.GONE
-
                 if (task.isSuccessful) {
-                    Log.d(TAG, "signInWithEmail:success")
-                    val user = auth.currentUser
-                    Toast.makeText(
-                        this,
-                        "Welcome back ${user?.email}!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    navigateToMain()
+                    // Credentials are correct, sign out temporarily and send OTP
+                    Log.d(TAG, "Credentials verified, sending OTP")
+                    auth.signOut()
+
+                    // Generate and send OTP
+                    sendLoginOtp(email, password)
                 } else {
+                    // Credentials are incorrect
+                    binding.btnEmailSignIn.isEnabled = true
+                    binding.progressBar.visibility = View.GONE
                     Log.w(TAG, "signInWithEmail:failure", task.exception)
                     Toast.makeText(
                         this,
@@ -153,6 +162,59 @@ class LoginActivity : AppCompatActivity() {
                     ).show()
                 }
             }
+    }
+
+    private fun sendLoginOtp(email: String, password: String) {
+        // Generate 6-digit OTP
+        val otp = generateOtp()
+
+        Log.d(TAG, "Generated Login OTP: $otp") // For debugging - remove in production
+
+        // Send OTP via email
+        EmailService.sendLoginOtpEmail(
+            email = email,
+            otp = otp,
+            onSuccess = {
+                runOnUiThread {
+                    binding.btnEmailSignIn.isEnabled = true
+                    binding.progressBar.visibility = View.GONE
+
+                    Toast.makeText(
+                        this,
+                        "Verification code sent to your email",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    // Navigate to OTP verification activity
+                    navigateToLoginOtpVerification(email, password, otp)
+                }
+            },
+            onFailure = { error ->
+                runOnUiThread {
+                    binding.btnEmailSignIn.isEnabled = true
+                    binding.progressBar.visibility = View.GONE
+
+                    Toast.makeText(
+                        this,
+                        "Failed to send verification code: $error",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        )
+    }
+
+    private fun generateOtp(): String {
+        return (100000..999999).random().toString()
+    }
+
+    private fun navigateToLoginOtpVerification(email: String, password: String, otp: String) {
+        val intent = Intent(this, LoginOtpVerificationActivity::class.java).apply {
+            putExtra(LoginOtpVerificationActivity.EXTRA_EMAIL, email)
+            putExtra(LoginOtpVerificationActivity.EXTRA_PASSWORD, password)
+            putExtra(LoginOtpVerificationActivity.EXTRA_OTP, otp)
+        }
+        startActivity(intent)
     }
 
     private fun navigateToRegister() {
@@ -192,11 +254,11 @@ class LoginActivity : AppCompatActivity() {
                 }
 
                 // Show loading
-                binding.progressBar.visibility = android.view.View.VISIBLE
+                binding.progressBar.visibility = View.VISIBLE
 
                 auth.sendPasswordResetEmail(email)
                     .addOnCompleteListener { task ->
-                        binding.progressBar.visibility = android.view.View.GONE
+                        binding.progressBar.visibility = View.GONE
                         if (task.isSuccessful) {
                             Toast.makeText(
                                 this,
@@ -226,14 +288,14 @@ class LoginActivity : AppCompatActivity() {
         auth.signInWithCredential(credential)
             .addOnCompleteListener(this) { task ->
                 binding.btnGoogleSignIn.isEnabled = true
-                binding.progressBar.visibility = android.view.View.GONE
+                binding.progressBar.visibility = View.GONE
 
                 if (task.isSuccessful) {
                     Log.d(TAG, "signInWithCredential:success")
                     val user = auth.currentUser
                     Toast.makeText(
                         this,
-                        "Welcome ${user?.displayName}!",
+                        "Welcome back ${user?.displayName}!",
                         Toast.LENGTH_SHORT
                     ).show()
                     navigateToMain()
@@ -242,7 +304,7 @@ class LoginActivity : AppCompatActivity() {
                     Toast.makeText(
                         this,
                         "Authentication failed: ${task.exception?.message}",
-                        Toast.LENGTH_LONG
+                        Toast.LENGTH_SHORT
                     ).show()
                 }
             }
@@ -253,9 +315,5 @@ class LoginActivity : AppCompatActivity() {
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
-    }
-
-    companion object {
-        private const val TAG = "LoginActivity"
     }
 }

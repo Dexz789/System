@@ -361,22 +361,37 @@
 
                         <!-- Results content with better styling -->
                         <FrameLayout
+                            android:id="@+id/frameResults"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:minHeight="120dp">
+                            android:minHeight="120dp"
+                            android:backgroundTint="@color/secondary">
+
+                            <!-- Wrap TextView and button in LinearLayout -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"/>
 
                             <TextView
                                 android:id="@+id/tvResults"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Upload or capture an image to get diagnosis results"
-                                android:textSize="14sp"
-                                android:textColor="?android:attr/textColorSecondary"
-                                android:lineSpacingExtra="4dp"
-                                android:padding="12dp"
-                                android:background="#F9F9F9"
-                                android:gravity="center"
-                                android:minHeight="120dp" />
+                                android:text="Select an image to detect strawberry diseases"
+                                android:textSize="16sp"
+                                android:padding="16dp"/>
+
+                            <!-- Consult AI Button - NOW INSIDE THE FRAMELAYOUT -->
+                            <Button
+                                android:id="@+id/btnConsultAI"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Consult AI"
+                                android:textColor="@android:color/white"
+                                android:layout_marginTop="8dp"
+                                android:visibility="gone"
+                                
+                                style="@style/Widget.MaterialComponents.Button"/>
 
                             <!-- Loading indicator -->
                             <ProgressBar
@@ -396,7 +411,8 @@
                             android:layout_marginTop="16dp"
                             android:orientation="horizontal"
                             android:visibility="gone"
-                            android:weightSum="2">
+                            android:weightSum="2"
+                            android:layout_gravity="center">
                             <ProgressBar
                                 android:id="@+id/progressBarSave"
                                 style="?android:attr/progressBarStyleSmall"
@@ -407,7 +423,8 @@
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnSaveDiagnosis"
-                                android:layout_width="0dp"
+                                android:layout_gravity="center"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:layout_marginEnd="8dp"
@@ -417,17 +434,6 @@
                                 app:iconGravity="textStart"
                                 style="@style/Widget.Material3.Button.TonalButton" />
 
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnConsultAI"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="8dp"
-                                android:text="Consult AI"
-                                android:textAllCaps="false"
-                                app:icon="@drawable/baseline_chat_bubble_24"
-                                app:iconGravity="textStart"
-                                style="@style/Widget.Material3.Button.TonalButton" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

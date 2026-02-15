@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.strawberry2"
-    compileSdk = 36  // FIXED: Should be a number, not a function
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.strawberry2"
@@ -20,6 +20,8 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
+
     }
 
     buildTypes {
@@ -39,6 +41,15 @@ android {
 
     kotlinOptions {
         jvmTarget = "11"
+    }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/NOTICE.md",
+                "META-INF/LICENSE.md"
+            )
+        }
     }
 
 }
@@ -87,4 +98,13 @@ dependencies {
     implementation("com.google.ai.client.generativeai:generativeai:0.1.2")
 
     implementation ("com.google.firebase:firebase-storage-ktx")
+
+    // For HTTP requests to Pl@net API
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+// For JSON parsing (if not already added)
+    implementation("org.json:json:20231013")
+
+    implementation("com.sun.mail:android-mail:1.6.7")
+
+    implementation("com.sun.mail:android-activation:1.6.7")
 }

@@ -221,6 +221,11 @@ If asked about topics outside of strawberry planting and cultivation, politely r
 
                     true
                 }
+                R.id.nav_home -> {
+                    if (currentActivity != "AboutActivity") {
+                        startActivity(Intent(this, MainActivity::class.java))
+                    }
+                }
                 R.id.nav_settings -> {
                     if (currentActivity != "SettingsActivity") {
                         startActivity(Intent(this, MainActivity::class.java))

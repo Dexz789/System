@@ -25,9 +25,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -39,7 +43,16 @@ import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.os.postDelayed
 import androidx.core.view.GravityCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.strawberry2.Chat.ChatAdapter
 import com.example.strawberry2.Chat.ChatBottomSheetDialog
+import com.example.strawberry2.Chat.ChatMessage
+import com.google.ai.client.generativeai.BuildConfig
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.type.generationConfig
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.card.MaterialCardView
@@ -55,7 +68,41 @@ import java.util.logging.Handler
 import kotlin.math.abs
 import kotlin.math.min
 
+
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private val SYSTEM_PROMPT = """
+            You are an expert AI assistant specializing in strawberry plant diseases and care.
+            IMPORTANT: Keep responses BRIEF and CONCISE (maximum 100 words).
+            Use bullet points for clarity.
+            Your expertise includes:
+            - Identifying strawberry diseases from images and descriptions
+            - Providing detailed treatment recommendations
+            - Suggesting prevention strategies
+            - Offering general strawberry plant care advice
+            
+            Guidelines:
+            - Be specific and actionable in your recommendations
+            - Use clear, farmer-friendly language
+            - Mention both organic and chemical treatment options when applicable
+            - Always consider the severity and stage of the disease
+            - Provide follow-up care instructions
+            - Be honest about when professional consultation is needed
+            
+            Format your responses clearly with:
+            - Disease identification and description
+            - Severity assessment
+            - Immediate actions needed
+            - Treatment options (organic and chemical)
+            - Prevention measures for future
+            - Expected recovery timeline
+            
+            Always be helpful, accurate, and encouraging to help farmers protect their crops.
+        """.trimIndent()
+    }
+
+
     private var aiInsightsText: String? = null
     private lateinit var fabChat: ExtendedFloatingActionButton
     private lateinit var navHeaderView: View
@@ -67,9 +114,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResults: TextView
     private lateinit var auth: FirebaseAuth
     private lateinit var diagnosisRepository: DiagnosisRepository
-
     private lateinit var guide: CardView
-
+    private val plantNetService = PlantNetService()
     private var selectedBitmap: Bitmap? = null
     private var currentDetections: List<ObjectDetector.Detection>? = null
     private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
@@ -564,59 +610,142 @@ class MainActivity : AppCompatActivity() {
     private fun performDetection(bitmap: Bitmap) {
         // Disable select button during detection
         btnSelectImage.isEnabled = false
-        tvResults.text = "Detecting diseases..."
+        tvResults.text = "Verifying plant species..."
 
-        // Hide button while detecting
+        // Hide buttons while detecting
         updateSaveButtonState()
+
+        // Also hide the Consult AI button during detection
+        val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
+        btnConsultAI.visibility = View.GONE
 
         // Run detection in background thread
         coroutineScope.launch {
             try {
-                val detections = withContext(Dispatchers.Default) {
-                    detector.detect(bitmap, confidenceThreshold = 0.5f)
+                // STEP 1: First verify if it's a strawberry plant using Pl@net API
+                tvResults.text = "Analyzing..."
+
+                val plantIdentification = withContext(Dispatchers.IO) {
+                    plantNetService.identifyPlant(bitmap)
                 }
 
-                // IMPORTANT: Store the detections for saving later
-                currentDetections = detections
+                plantIdentification.onSuccess { identification ->
+                    // Log the identification result for debugging
+                    println("DEBUG: Plant identified - ${identification.scientificName} (${identification.commonName})")
+                    println("DEBUG: Is strawberry: ${identification.isStrawberry}, Confidence: ${identification.confidence}")
 
-                if (detections.isEmpty()) {
-                    tvResults.text = "No diseases detected. Plant appears healthy! Or please take a picture of a strawberry plant"
-                    btnSelectImage.isEnabled = true
-                    // Let updateSaveButtonState decide if button should show
-                    updateSaveButtonState()
-                    return@launch
-                }
+                    // Check if it's a strawberry plant
+                    if (!identification.isStrawberry) {
+                        // NOT A STRAWBERRY PLANT (or no plant detected at all)
+                        tvResults.text = buildString {
+                            append("Not a strawberry plant\n\n")
 
-                // Draw bounding boxes on image
-                val annotatedBitmap = withContext(Dispatchers.Default) {
-                    drawBoundingBoxes(bitmap, detections)
-                }
-                imageView.setImageBitmap(annotatedBitmap)
+                            // If we detected something, show what it is
+                            if (identification.scientificName != null && identification.confidence > 0.1f) {
+                                append("Detected: ${identification.commonName ?: identification.scientificName}\n")
+                                append("Confidence: ${String.format("%.1f%%", identification.confidence * 100)}\n\n")
+                                append("Please take a picture of a strawberry plant for disease analysis.")
+                            } else {
+                                // No plant detected or very low confidence
+                                append("Could not identify any plant in this image.\n\n")
+                                append("Please ensure:\n")
+                                append("• The image clearly shows a plant\n")
+                                append("• The plant is a strawberry\n")
+                                append("• The image has good lighting")
+                            }
+                        }
 
-                // Display results text
-                val resultsText = buildString {
-                    append("Found ${detections.size} issue(s):\n\n")
-                    detections.forEachIndexed { index, detection ->
-                        append("${index + 1}. ${detection.label}\n")
-                        append("   Confidence: ${String.format("%.1f%%", detection.score * 100)}\n")
-                        append("   Location: (${detection.boundingBox.left.toInt()}, ")
-                        append("${detection.boundingBox.top.toInt()}) to ")
-                        append("(${detection.boundingBox.right.toInt()}, ")
-                        append("${detection.boundingBox.bottom.toInt()})\n\n")
+                        btnSelectImage.isEnabled = true
+                        currentDetections = null
+                        updateSaveButtonState()
+                        // Don't show Consult AI button for non-strawberry plants
+                        btnConsultAI.visibility = View.GONE
+                        return@launch
                     }
-                }
-                tvResults.text = resultsText
 
-                btnSelectImage.isEnabled = true
-                // Let updateSaveButtonState decide if button should show
-                updateSaveButtonState()
+                    // STEP 2: It IS a strawberry plant - proceed with disease detection
+                    tvResults.text = "Strawberry plant confirmed! Analyzing for diseases..."
+
+                    val detections = withContext(Dispatchers.Default) {
+                        detector.detect(bitmap, confidenceThreshold = 0.5f)
+                    }
+
+                    // IMPORTANT: Store the detections for saving later
+                    currentDetections = detections
+
+                    if (detections.isEmpty()) {
+                        // NO DISEASES DETECTED - Plant is healthy
+                        tvResults.text = buildString {
+                            append("✓ Plant appears to be healthy\n\n")
+                            append("Species: ${identification.commonName ?: "Strawberry"}\n")
+                            if (identification.scientificName != null) {
+                                append("Scientific name: ${identification.scientificName}\n")
+                            }
+                            append("\nNo diseases detected in this image.")
+                        }
+
+                        btnSelectImage.isEnabled = true
+                        updateSaveButtonState()
+                        // Show Consult AI even for healthy plants (user might want advice)
+                        btnConsultAI.visibility = View.VISIBLE
+                        return@launch
+                    }
+
+                    // DISEASES DETECTED - Show results with bounding boxes
+                    val annotatedBitmap = withContext(Dispatchers.Default) {
+                        drawBoundingBoxes(bitmap, detections)
+                    }
+                    imageView.setImageBitmap(annotatedBitmap)
+
+                    // Display results text
+                    val resultsText = buildString {
+                        append("⚠ Found ${detections.size} issue(s):\n\n")
+                        detections.forEachIndexed { index, detection ->
+                            append("${index + 1}. ${detection.label}\n")
+                            append("   Confidence: ${String.format("%.1f%%", detection.score * 100)}\n")
+                            append("   Location: (${detection.boundingBox.left.toInt()}, ")
+                            append("${detection.boundingBox.top.toInt()}) to ")
+                            append("(${detection.boundingBox.right.toInt()}, ")
+                            append("${detection.boundingBox.bottom.toInt()})\n\n")
+                        }
+                    }
+                    tvResults.text = resultsText
+
+                    btnSelectImage.isEnabled = true
+                    updateSaveButtonState()
+
+                    // ✅ SHOW CONSULT AI BUTTON when diseases are detected
+                    btnConsultAI.visibility = View.VISIBLE
+
+                }.onFailure { exception ->
+                    // ⚠️ IMPROVED: PlantNet API failed - be conservative
+                    println("WARNING: PlantNet API failed: ${exception.message}")
+                    exception.printStackTrace()
+
+                    // Don't proceed with disease detection if we can't verify the plant
+                    // This prevents false positives on non-plant images
+                    tvResults.text = buildString {
+                        append("Not a Strawberry Plant\n\n")
+                        append("Please ensure:\n")
+                        append("• The image clearly shows a plant\n")
+                        append("• The plant is a strawberry\n")
+                        append("• The image has good lighting")
+                    }
+
+                    btnSelectImage.isEnabled = true
+                    currentDetections = null
+                    updateSaveButtonState()
+                    // Don't show Consult AI button when verification fails
+                    btnConsultAI.visibility = View.GONE
+                }
 
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "Error during detection: ${e.message}", Toast.LENGTH_LONG).show()
                 tvResults.text = "Error: ${e.message}"
                 btnSelectImage.isEnabled = true
-                // Button will stay hidden due to error state
+                currentDetections = null
                 updateSaveButtonState()
+                btnConsultAI.visibility = View.GONE
                 e.printStackTrace()
             }
         }
@@ -861,39 +990,222 @@ class MainActivity : AppCompatActivity() {
         layout.background = gradientDrawable
     }
     private fun consultAI() {
-        val detections = currentDetections
-        if (detections == null || detections.isEmpty()) {
-            Toast.makeText(this, "No diagnosis to consult about", Toast.LENGTH_SHORT).show()
+        if (currentDetections.isNullOrEmpty() || selectedBitmap == null) {
+            Toast.makeText(this, "No diagnosis available to consult", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val bitmap = selectedBitmap
-        if (bitmap == null) {
-            Toast.makeText(this, "No image available", Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Hide the Consult AI button and show AI chat interface
+        val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
+        btnConsultAI.visibility = View.GONE
 
-        val diagnosisSummary = buildString {
-            append("I have a diagnosis from my trained disease detection model:\n\n")
-            append("Total issues found: ${detections.size}\n\n")
-            detections.forEachIndexed { index, detection ->
-                append("${index + 1}. ${detection.label}\n")
-                append("   Confidence: ${String.format("%.1f%%", detection.score * 100)}\n")
-            }
-            append("\nCan you provide insights about these detected issues and recommend treatment options?")
-        }
+        // Show the AI chat interface in the FrameLayout
+        showAIChatInFrame()
+    }
 
-        // Open chat dialog with callback to receive AI response
-        val chatDialog = ChatBottomSheetDialog.newInstance(
-            initialMessage = diagnosisSummary,
-            image = bitmap,
-            onAiResponseSaved = { aiResponse ->
-                appendAiInsightsToDiagnosis(aiResponse)
+    private fun showAIChatInFrame() {
+        val frameResults: FrameLayout = findViewById(R.id.frameResults)
+
+        // ✅ BETTER APPROACH: Don't remove original views, just hide them
+        // Find the original diagnosis layout
+        val originalLayout = frameResults.getChildAt(0)
+        originalLayout?.visibility = View.GONE  // Hide instead of remove
+
+        // Inflate the chat layout into the FrameLayout
+        val chatView = layoutInflater.inflate(R.layout.layout_inline_chat, frameResults, false)
+        frameResults.addView(chatView)  // Add chat as second child
+
+        // Initialize chat components
+        val recyclerChat: RecyclerView = chatView.findViewById(R.id.recyclerChat)
+        val etChatMessage: EditText = chatView.findViewById(R.id.etChatMessage)
+        val btnSendChat: ImageButton = chatView.findViewById(R.id.btnSendChat)
+        val progressChat: ProgressBar = chatView.findViewById(R.id.progressChat)
+        val btnCloseChat: ImageButton = chatView.findViewById(R.id.btnCloseChat)
+
+        // Set up RecyclerView with onSaveClick callback
+        val chatMessages = mutableListOf<ChatMessage>()
+        val chatAdapter = ChatAdapter(chatMessages) { aiResponse ->
+            aiInsightsText = aiResponse
+            Toast.makeText(this, "AI insights saved to diagnosis", Toast.LENGTH_SHORT).show()
+        }
+        recyclerChat.layoutManager = LinearLayoutManager(this)
+        recyclerChat.adapter = chatAdapter
+
+        // Initialize Gemini with output limits
+        val generativeModel = GenerativeModel(
+            modelName = "gemini-2.5-flash-lite",
+            apiKey = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0",
+            generationConfig = generationConfig {
+                temperature = 0.7f
+                topK = 40
+                topP = 0.95f
+                maxOutputTokens = 500
             }
         )
 
-        chatDialog.show(supportFragmentManager, "ChatBottomSheetDialog")
+        // Send concise initial diagnosis message
+        val diagnosisText = tvResults.text.toString()
+        val initialPrompt = """
+        I've detected the following on a strawberry plant:
+        
+        $diagnosisText
+        
+        Provide a BRIEF analysis (max 150 words) with bullet points covering:
+        1. What this condition means
+        2. Immediate treatment steps
+        3. Prevention tips
+    """.trimIndent()
+
+        // Add user message with image
+        chatMessages.add(ChatMessage(
+            message = initialPrompt,
+            isUser = true,
+            image = selectedBitmap
+        ))
+        chatAdapter.notifyItemInserted(chatMessages.size - 1)
+        recyclerChat.scrollToPosition(chatMessages.size - 1)
+
+        // Show loading
+        progressChat.visibility = View.VISIBLE
+        btnSendChat.isEnabled = false
+
+        // Get AI response
+        lifecycleScope.launch {
+            try {
+                val inputContent = content {
+                    image(selectedBitmap!!)
+                    text("$SYSTEM_PROMPT\n\nUser: $initialPrompt")
+                }
+                val response = generativeModel.generateContent(inputContent)
+                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response."
+
+                chatMessages.add(ChatMessage(
+                    message = aiResponseText,
+                    isUser = false,
+                    canBeSaved = false
+                ))
+                chatAdapter.notifyItemInserted(chatMessages.size - 1)
+                recyclerChat.scrollToPosition(chatMessages.size - 1)
+
+                aiInsightsText = aiResponseText
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error getting AI response", e)
+                val errorMessage = "Sorry, I encountered an error: ${e.message}"
+                chatMessages.add(ChatMessage(
+                    message = errorMessage,
+                    isUser = false,
+                    canBeSaved = false
+                ))
+                chatAdapter.notifyItemInserted(chatMessages.size - 1)
+                recyclerChat.scrollToPosition(chatMessages.size - 1)
+            } finally {
+                progressChat.visibility = View.GONE
+                btnSendChat.isEnabled = true
+            }
+        }
+
+        // Handle send button
+        btnSendChat.setOnClickListener {
+            val messageText = etChatMessage.text.toString().trim()
+            if (messageText.isEmpty()) {
+                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // ✅ BUILD HISTORY FIRST (before adding new message)
+            val conversationHistory = buildString {
+                append(SYSTEM_PROMPT)
+                append("\n\n")
+
+                chatMessages.takeLast(10).forEach { msg ->
+                    if (msg.isUser) {
+                        append("User: ${msg.message}\n\n")
+                    } else {
+                        append("Assistant: ${msg.message}\n\n")
+                    }
+                }
+
+                append("User: $messageText\n\nAssistant (respond in max 150 words with bullet points):")
+            }
+
+            chatMessages.add(ChatMessage(messageText, isUser = true))
+            chatAdapter.notifyItemInserted(chatMessages.size - 1)
+            recyclerChat.scrollToPosition(chatMessages.size - 1)
+            etChatMessage.text?.clear()
+
+            progressChat.visibility = View.VISIBLE
+            btnSendChat.isEnabled = false
+
+            lifecycleScope.launch {
+                try {
+                    val conversationHistory = buildString {
+                        append(SYSTEM_PROMPT)
+                        append("\n\n")
+                        chatMessages.takeLast(10).forEach { msg ->
+                            if (msg.isUser) {
+                                append("User: ${msg.message}\n\n")
+                            } else {
+                                append("Assistant: ${msg.message}\n\n")
+                            }
+                        }
+                        append("User: $messageText\n\nAssistant (respond in max 150 words with bullet points):")
+                    }
+
+                    val response = generativeModel.generateContent(conversationHistory)
+                    val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response."
+
+                    chatMessages.add(ChatMessage(
+                        message = aiResponseText,
+                        isUser = false,
+                        canBeSaved = false
+                    ))
+                    chatAdapter.notifyItemInserted(chatMessages.size - 1)
+                    recyclerChat.scrollToPosition(chatMessages.size - 1)
+
+                    aiInsightsText = if (aiInsightsText.isNullOrEmpty()) {
+                        aiResponseText
+                    } else {
+                        "$aiInsightsText\n\n---\n\n$aiResponseText"
+                    }
+
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error getting AI response", e)
+                    chatMessages.add(ChatMessage(
+                        message = "Sorry, I encountered an error: ${e.message}",
+                        isUser = false,
+                        canBeSaved = false
+                    ))
+                    chatAdapter.notifyItemInserted(chatMessages.size - 1)
+                    recyclerChat.scrollToPosition(chatMessages.size - 1)
+                } finally {
+                    progressChat.visibility = View.GONE
+                    btnSendChat.isEnabled = true
+                }
+            }
+        }
+
+        // ✅ IMPROVED: Handle close button - restore original views
+        btnCloseChat.setOnClickListener {
+            try {
+                // Remove the chat view
+                frameResults.removeView(chatView)
+
+                // Show the original diagnosis layout again
+                originalLayout?.visibility = View.VISIBLE
+
+                // Make sure the Consult AI button is visible
+                val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
+                btnConsultAI.visibility = View.VISIBLE
+
+                Toast.makeText(this, "Chat closed", Toast.LENGTH_SHORT).show()
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error closing chat", e)
+                Toast.makeText(this, "Error closing chat: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
+
 
     // Add this new method to MainActivity to handle AI insights
     private fun appendAiInsightsToDiagnosis(aiInsights: String) {

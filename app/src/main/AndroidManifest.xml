@@ -27,6 +27,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Strawberry2">
         <activity
+            android:name=".Otp.LoginOtpVerificationActivity"
+            android:exported="false" />
+        <activity
+            android:name=".Otp.OtpVerificationActivity"
+            android:exported="false" />
+        <activity
             android:name=".Plant"
             android:exported="false" />
         <activity
