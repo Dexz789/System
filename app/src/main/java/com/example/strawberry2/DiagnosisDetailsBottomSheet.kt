@@ -101,7 +101,8 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
 
         // AI Insights
         if (!diagnosis.aiInsights.isNullOrEmpty()) {
-            tvAiInsights.text = diagnosis.aiInsights
+            val markwon = io.noties.markwon.Markwon.create(requireContext())
+            markwon.setMarkdown(tvAiInsights, diagnosis.aiInsights ?: "")
             tvAiInsights.visibility = View.VISIBLE
         } else {
             tvAiInsights.visibility = View.GONE

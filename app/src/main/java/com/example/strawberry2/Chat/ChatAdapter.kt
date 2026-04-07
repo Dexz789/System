@@ -55,7 +55,8 @@ class ChatAdapter(
         private val ivMessageImage: ImageView? = itemView.findViewById(R.id.ivMessageImage)
 
         fun bind(message: ChatMessage) {
-            tvMessage.text = message.message
+            val markwon = io.noties.markwon.Markwon.create(itemView.context)
+            markwon.setMarkdown(tvMessage, message.message)
 
             if (message.image != null && ivMessageImage != null) {
                 ivMessageImage.visibility = View.VISIBLE
@@ -74,8 +75,8 @@ class ChatAdapter(
         private val btnSaveResponse: Button? = itemView.findViewById(R.id.btnSaveResponse)
 
         fun bind(message: ChatMessage) {
-            tvMessage.text = message.message
-
+            val markwon = io.noties.markwon.Markwon.create(itemView.context)
+            markwon.setMarkdown(tvMessage, message.message)
             // Show save button if this message can be saved
             if (message.canBeSaved && btnSaveResponse != null) {
                 btnSaveResponse.visibility = View.VISIBLE

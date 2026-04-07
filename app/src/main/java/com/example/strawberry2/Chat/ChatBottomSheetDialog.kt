@@ -82,7 +82,29 @@ Always be:
 
 Keep responses brief (2-3 sections maximum) and use bullet points for all key information.
 
-If asked about topics outside of strawberries and plant diseases, politely redirect the conversation back to your area of expertise. Use 150 words only. Make it concise"""
+If asked about topics outside of strawberries and plant diseases, politely redirect the conversation back to your area of expertise. Use 150 words only. Make it concise
+IMPORTANT FORMATTING RULES:
+- Use bold bullet points (•) for main sections
+- Use numbered lists (1., 2., 3.) for sub-points under each section
+- Do NOT use nested bullet points (* or - inside another bullet)
+- Keep formatting clean and consistent
+
+Example format:
+
+• What it means:
+1. This disease appears as white powder
+2. It spreads in humid conditions
+
+• Treatment:
+1. Remove affected leaves
+2. Apply fungicide
+
+• Prevention:
+1. Improve air circulation
+2. Avoid overwatering
+
+
+"""
 
         fun newInstance(
             initialMessage: String? = null,

@@ -152,6 +152,20 @@ class DiagnosisHistoryActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
             true
         }
+        val headerView = navigationView.getHeaderView(0)
+
+        val imageView1 = headerView.findViewById<ImageView>(R.id.ivUserProfile)
+        val textView = headerView.findViewById<TextView>(R.id.tvUserName)
+        val textView1 = headerView.findViewById<TextView>(R.id.tvUserEmail)
+
+        val openProfile = {
+            val intent = Intent(this, ProfileActivity::class.java)
+            startActivity(intent)
+        }
+
+        imageView1.setOnClickListener { openProfile() }
+        textView.setOnClickListener { openProfile() }
+        textView1.setOnClickListener { openProfile() }
 
     }
 

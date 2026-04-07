@@ -1,10 +1,5 @@
 package com.example.strawberry2
 
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.ActionBarDrawerToggle
-import androidx.drawerlayout.widget.DrawerLayout
-import com.google.android.material.navigation.NavigationView
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -23,6 +18,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
@@ -35,21 +31,21 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
-import androidx.core.os.postDelayed
 import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.strawberry2.Chat.ChatAdapter
 import com.example.strawberry2.Chat.ChatBottomSheetDialog
 import com.example.strawberry2.Chat.ChatMessage
-import com.google.ai.client.generativeai.BuildConfig
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -57,14 +53,13 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-
+import com.google.android.material.navigation.NavigationView
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
-import java.io.IOException
 import kotlinx.coroutines.*
+import java.io.IOException
 import java.net.URL
-import java.util.logging.Handler
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -99,6 +94,26 @@ class MainActivity : AppCompatActivity() {
             - Expected recovery timeline
             
             Always be helpful, accurate, and encouraging to help farmers protect their crops.
+            
+            IMPORTANT FORMATTING RULES:
+            - Use bold bullet points (•) for main sections
+            - Use numbered lists (1., 2., 3.) for sub-points under each section
+            - Do NOT use nested bullet points (* or - inside another bullet)
+            - Keep formatting clean and consistent
+
+            Example format:
+
+            • What it means:
+            1. This disease appears as white powder
+            2. It spreads in humid conditions
+
+            • Treatment:
+            1. Remove affected leaves
+            2. Apply fungicide
+
+            • Prevention:
+            1. Improve air circulation
+            2. Avoid overwatering
         """.trimIndent()
     }
 
@@ -110,6 +125,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toggle: ActionBarDrawerToggle
     private lateinit var detector: ObjectDetector
     private lateinit var imageView: ImageView
+    private lateinit var profile: ImageView
+
     private lateinit var btnSelectImage: MaterialCardView
     private lateinit var tvResults: TextView
     private lateinit var auth: FirebaseAuth
@@ -174,7 +191,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility", "MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -200,6 +217,14 @@ class MainActivity : AppCompatActivity() {
         navigationView.setNavigationItemSelectedListener { item ->
             val currentActivity = this::class.java.simpleName
             when (item.itemId) {
+                R.id.nav_profile -> {
+                    if (currentActivity != "ProfileActivity") {
+                        startActivity(Intent(this, ProfileActivity::class.java))
+                    }
+                    drawerLayout.closeDrawers()
+                    true
+                }
+
                 R.id.nav_about -> {
                     drawerLayout.closeDrawer(GravityCompat.START) // ✅ close the drawer first
 
@@ -244,10 +269,27 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(this, DiagnosisHistoryActivity::class.java))
                     }
                 }
+
             }
             drawerLayout.closeDrawers()
             true
+
+
         }
+        val headerView = navigationView.getHeaderView(0)
+
+        val imageView1 = headerView.findViewById<ImageView>(R.id.ivUserProfile)
+        val textView = headerView.findViewById<TextView>(R.id.tvUserName)
+        val textView1 = headerView.findViewById<TextView>(R.id.tvUserEmail)
+
+        val openProfile = {
+            val intent = Intent(this, ProfileActivity::class.java)
+            startActivity(intent)
+        }
+
+        imageView1.setOnClickListener { openProfile() }
+        textView.setOnClickListener { openProfile() }
+        textView1.setOnClickListener { openProfile() }
 
         // Initialize views
         imageView = findViewById(R.id.imageView)
@@ -265,6 +307,7 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
             return
         }
+
 
         // Set up button listener
         btnSelectImage.setOnClickListener {
