@@ -6,6 +6,7 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -25,11 +26,15 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
     private lateinit var diagnosis: DiagnosisData
 
     companion object {
-        fun newInstance(diagnosis: DiagnosisData): DiagnosisDetailsBottomSheet {
+        private const val ARG_DIAGNOSIS   = "diagnosis"
+        private const val ARG_SHOW_TUTORIAL = "show_tutorial"
+
+        fun newInstance(diagnosis: DiagnosisData, showTutorial: Boolean = false): DiagnosisDetailsBottomSheet {
             val fragment = DiagnosisDetailsBottomSheet()
-            val args = Bundle()
-            args.putSerializable("diagnosis", diagnosis)
-            fragment.arguments = args
+            fragment.arguments = Bundle().apply {
+                putSerializable(ARG_DIAGNOSIS, diagnosis)
+                putBoolean(ARG_SHOW_TUTORIAL, showTutorial)
+            }
             return fragment
         }
     }
@@ -48,12 +53,24 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val showTutorial = arguments?.getBoolean(ARG_SHOW_TUTORIAL, false) ?: false
+        val tutorialBanner = view.findViewById<View>(R.id.tutorialBanner)
+        val btnFinishTour  = view.findViewById<Button>(R.id.btnFinishTour)
         val ivImage = view.findViewById<ImageView>(R.id.ivDiagnosisImage)
         val tvSummary = view.findViewById<TextView>(R.id.tvDiagnosisSummary)
         val tvDetections = view.findViewById<TextView>(R.id.tvDetections)
         val tvAiInsights = view.findViewById<TextView>(R.id.tvAiInsights)
         val btnClose = view.findViewById<ImageButton>(R.id.btnClose)
         val progressBar = view.findViewById<ProgressBar>(R.id.progressBarImage) // ✅ new line
+
+        if (showTutorial) {
+            tutorialBanner.visibility = View.VISIBLE
+            btnFinishTour.setOnClickListener {
+                tutorialBanner.visibility = View.GONE
+            }
+        } else {
+            tutorialBanner.visibility = View.GONE
+        }
 
         // Initially hide image and show loader
         ivImage.visibility = View.INVISIBLE

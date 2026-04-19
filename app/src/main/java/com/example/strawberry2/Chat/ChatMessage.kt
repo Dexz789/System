@@ -7,7 +7,8 @@ data class ChatMessage(
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
     val image: Bitmap? = null,  // Add image support
-    val canBeSaved: Boolean = false  // Flag to show save button
-
+    val canBeSaved: Boolean = false,  // Flag to show save button
+    val excludeFromHistory: Boolean = false,
+    val isInitialPrompt: Boolean = false
 )
 

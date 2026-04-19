@@ -1,6 +1,7 @@
 package com.example.strawberry2.Chat
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -140,6 +141,7 @@ Example format:
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        (view.parent as? View)?.setBackgroundColor(Color.TRANSPARENT)
 
         initializeViews(view)
         setupRecyclerView()
@@ -294,13 +296,19 @@ Example format:
             try {
                 // ✅ FIX 6: Simplified conversation history building
                 val conversationHistory = buildString {
-                    append(SYSTEM_PROMPT)
-                    append("\n\n")
+                    if (messages.size <= 2) {
+                        append(SYSTEM_PROMPT)
+                        append("\n\n")
+                    }
+
 
                     // Include last 5 message pairs for context (to avoid token limits)
                     val recentMessages = messages
-                        .filter { !it.message.contains("Hello! 🍓") } // Skip welcome
-                        .takeLast(10) // Last 10 messages (5 pairs)
+                        .filter {
+                            !it.message.contains("Hello! 🍓") &&
+                                    !it.message.contains("What it means:", ignoreCase = true) // ❌ exclude long diagnosis format
+                        }
+                        .takeLast(4) // ✅ only keep last 2 exchanges (user + AI)
 
                     recentMessages.forEach { msg ->
                         if (msg.isUser) {

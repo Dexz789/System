@@ -4,9 +4,11 @@ package com.example.strawberry2
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -23,6 +25,7 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.strawberry2.Tutorial.TutorialOverlayView
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.navigation.NavigationView
@@ -54,6 +57,10 @@ class DiagnosisHistoryActivity : AppCompatActivity() {
     private lateinit var deleteButton: Button
     private lateinit var selectAllButton: Button
     private lateinit var selectionToolbar: LinearLayout
+
+    private val showTutorialSpotlight by lazy {
+        intent.getBooleanExtra("SHOW_TUTORIAL_SPOTLIGHT", false)
+    }
 
     private val activityScope  = CoroutineScope(Dispatchers.Main + Job())
 
@@ -322,39 +329,125 @@ class DiagnosisHistoryActivity : AppCompatActivity() {
         emptyView.visibility = View.GONE
         recyclerView.visibility = View.GONE
 
-        activityScope .launch {
+        activityScope.launch {
             try {
                 val result = repository.getUserDiagnoses(user.uid)
 
                 result.onSuccess { diagnoses ->
+                    progressBar.visibility = View.GONE
+
                     if (diagnoses.isEmpty()) {
                         emptyView.visibility = View.VISIBLE
                         emptyView.text = "No diagnosis history yet.\nStart by scanning some strawberries!"
                     } else {
                         recyclerView.visibility = View.VISIBLE
                         adapter.submitList(diagnoses)
+
+                        // ── Tutorial Step 5 ──────────────────────────────────────
+                        if (showTutorialSpotlight) {
+                            recyclerView.viewTreeObserver.addOnGlobalLayoutListener(
+                                object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                                    override fun onGlobalLayout() {
+                                        recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                                        val firstItem = recyclerView.layoutManager?.findViewByPosition(0)
+                                        if (firstItem != null) showDiagnosisSpotlight(firstItem)
+                                    }
+                                }
+                            )
+                        }
+                        // ─────────────────────────────────────────────────────────
                     }
-                    progressBar.visibility = View.GONE
                 }.onFailure { exception ->
+                    progressBar.visibility = View.GONE
                     Toast.makeText(
                         this@DiagnosisHistoryActivity,
                         "Error loading history: ${exception.message}",
                         Toast.LENGTH_LONG
                     ).show()
-                    progressBar.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
                     emptyView.text = "Error loading history"
                 }
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@DiagnosisHistoryActivity,
-                    "Error: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
                 progressBar.visibility = View.GONE
+                Toast.makeText(this@DiagnosisHistoryActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                 e.printStackTrace()
             }
         }
+    }
+    private fun showDiagnosisSpotlight(itemView: View) {
+        val decorView = window.decorView as ViewGroup
+        val overlay = com.example.strawberry2.Tutorial.TutorialOverlayView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            tooltipTitle         = "🗂️  Your Saved Diagnosis"
+            tooltipDescription   = "This is your most recently saved diagnosis. Tap it to open " +
+                    "the full report and see your results, image, and AI insights!"
+            showNextButton       = false
+            spotlightInteractive = false   // ← false so onSpotlightClick fires
+            onDimClick           = { /* block background taps */ }
+            onSpotlightClick = {
+                Log.d("TutorialDebug", "Diagnosis item tapped — opening bottom sheet")
+                (window.decorView as ViewGroup).removeView(this)
+
+                // Open bottom sheet directly, passing the tutorial flag
+                val recyclerPos = recyclerView.getChildAdapterPosition(itemView)
+                val diagnosis = /* get diagnosis from adapter */ adapter.getDiagnosis(recyclerPos)
+                DiagnosisDetailsBottomSheet.newInstance(diagnosis, showTutorial = true)
+                    .show(supportFragmentManager, "DiagnosisDetails")
+            }
+        }
+
+        val loc = IntArray(2)
+        itemView.getLocationOnScreen(loc)
+        overlay.spotlightRect = android.graphics.RectF(
+            loc[0].toFloat(),
+            loc[1].toFloat(),
+            (loc[0] + itemView.width).toFloat(),
+            (loc[1] + itemView.height).toFloat()
+        )
+
+        decorView.addView(overlay)
+    }
+
+    private fun showFinalTourOverlay() {
+        val activityDecor = window.decorView as ViewGroup
+
+        val overlay = TutorialOverlayView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            tooltipTitle = "🎉  Tutorial Complete!"
+            tooltipDescription = "This bottom sheet shows your full saved diagnosis — " +
+                    "image, detections, confidence scores, and AI insights. " +
+                    "You're all set. Happy growing! 🌱"
+            showNextButton = true
+            nextButtonText = "Finish Tour  🎉"
+            spotlightInteractive = false
+            onNextClick = {
+                Log.d("TutorialDebug", "Finish Tour tapped — tour complete")
+                activityDecor.removeView(this)
+            }
+            onDimClick = { /* block background taps */ }
+
+            // ← KEY FIX: give it a fake center spotlight so drawTooltip() is triggered
+            post {
+                spotlightRect = android.graphics.RectF(
+                    width / 2f - 1f,
+                    height / 2f - 1f,
+                    width / 2f + 1f,
+                    height / 2f + 1f
+                )
+            }
+        }
+
+        // Use elevation to float above the bottom sheet dialog
+        overlay.elevation = 99999f
+        activityDecor.addView(overlay)
+        activityDecor.bringChildToFront(overlay)
+
     }
     private fun showAboutDialog() {
         val aboutMessage = """
@@ -411,6 +504,8 @@ class DiagnosisAdapter(
     private var diagnoses = mutableListOf<DiagnosisData>()
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
     private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
+    fun getDiagnosis(position: Int): DiagnosisData = diagnoses[position]
+
 
     fun submitList(newDiagnoses: List<DiagnosisData>) {
         diagnoses.clear()

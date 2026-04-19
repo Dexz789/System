@@ -62,14 +62,23 @@ import java.io.IOException
 import java.net.URL
 import kotlin.math.abs
 import kotlin.math.min
-
+import com.example.strawberry2.Tutorial.TutorialManager
+import androidx.core.widget.NestedScrollView
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
         private val SYSTEM_PROMPT = """
-            You are an expert AI assistant specializing in strawberry plant diseases and care.
-            IMPORTANT: Keep responses BRIEF and CONCISE (maximum 100 words).
+            You are an friendly AI assistant specializing in strawberry plant diseases and care.
+            
+            IMPORTANT: 
+            Keep responses BRIEF and CONCISE (maximum 100 words).
+            For ALL follow-up messages, respond CONVERSATIONALLY and NATURALLY.
+            Do not repeat the diagnosis. Just answer what the user is asking.
+            Keep follow-up replies short and friendly (1-3 sentences is fine).
+            You can still use bullet points when listing things, but do not force
+            the structured format on every reply.
+            
             Use bullet points for clarity.
             Your expertise includes:
             - Identifying strawberry diseases from images and descriptions
@@ -125,8 +134,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toggle: ActionBarDrawerToggle
     private lateinit var detector: ObjectDetector
     private lateinit var imageView: ImageView
-    private lateinit var profile: ImageView
-
+    private lateinit var networkMonitor: NetworkMonitor
+    private var noInternetDialog: AlertDialog? = null
     private lateinit var btnSelectImage: MaterialCardView
     private lateinit var tvResults: TextView
     private lateinit var auth: FirebaseAuth
@@ -136,8 +145,11 @@ class MainActivity : AppCompatActivity() {
     private var selectedBitmap: Bitmap? = null
     private var currentDetections: List<ObjectDetector.Detection>? = null
     private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
-
+    private lateinit var tutorialManager: TutorialManager
+    var isTutorialActive: Boolean = false
     // Camera capture launcher
+
+
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -146,6 +158,31 @@ class MainActivity : AppCompatActivity() {
             bitmap?.let {
                 selectedBitmap = it
                 imageView.setImageBitmap(it)
+                val takePictureLauncher = registerForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    if (result.resultCode == Activity.RESULT_OK) {
+                        val bitmap = result.data?.extras?.get("data") as? Bitmap
+                        bitmap?.let {
+                            selectedBitmap = it
+                            imageView.setImageBitmap(it)
+                            tvResults.text = "Analyzing captured image..."
+                            currentDetections = null
+                            resetSaveButton()
+                            updateSaveButtonState()
+                            aiInsightsText = null
+
+                            // ── Tutorial: advance to step 3 ──
+                            if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
+                                val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                                val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
+                                tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
+                            }
+
+                            performDetection(it)
+                        }
+                    }
+                }
                 tvResults.text = "Analyzing captured image..."
 
                 // Clear old detections and reset button
@@ -195,6 +232,22 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        networkMonitor = NetworkMonitor(this) { isConnected ->
+            runOnUiThread {
+                if (isConnected) {
+                    dismissNoInternetDialog()
+                } else {
+                    showNoInternetDialog()
+                }
+            }
+        }
+        networkMonitor.start()
+
+// Show immediately on launch if already offline
+        if (!networkMonitor.isConnected()) {
+            showNoInternetDialog()
+        }
         title = "GrowMate"
         // Initialize Firebase Auth and Repository FIRST - BEFORE anything else
         auth = Firebase.auth
@@ -406,9 +459,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+        showTutorialIfNeeded()
 
 
     }
+
 
     private fun saveDiagnosis() {
         val user = auth.currentUser
@@ -487,23 +542,35 @@ class MainActivity : AppCompatActivity() {
 
                     btnSaveDiagnosis.text = "Saved ✓"
                     btnSaveDiagnosis.isEnabled = false
-                    progressBarSave.visibility = View.GONE // ✅ hide spinner
+                    progressBarSave.visibility = View.GONE
+
+                    // ── Tutorial logging ──
+                    Log.d("TutorialDebug", "onSuccess fired — id=$id")
+                    Log.d("TutorialDebug", "isTutorialActive=$isTutorialActive")
+                    Log.d("TutorialDebug", "tutorialManager initialized=${::tutorialManager.isInitialized}")
+
+                    if (isTutorialActive && ::tutorialManager.isInitialized) {
+                        Log.d("TutorialDebug", "Calling onSaveComplete()")
+                        tutorialManager.onSaveComplete()
+                    } else {
+                        Log.d("TutorialDebug", "onSaveComplete NOT called — condition failed")
+                    }
                 }
                     .onFailure { exception ->
-                    println("ERROR MainActivity: Save failed: ${exception.message}")
-                    exception.printStackTrace()
-                    tvResults.text = "$originalText\n\n✗ Save failed: ${exception.message}"
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Error saving diagnosis: ${exception.message}",
-                        Toast.LENGTH_LONG
+                        println("ERROR MainActivity: Save failed: ${exception.message}")
+                        exception.printStackTrace()
+                        tvResults.text = "$originalText\n\n✗ Save failed: ${exception.message}"
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Error saving diagnosis: ${exception.message}",
+                            Toast.LENGTH_LONG
 
-                    ).show()
-                    // Re-enable button to allow retry
+                        ).show()
+                        // Re-enable button to allow retry
                         btnSaveDiagnosis.text = "Save Diagnosis"
                         btnSaveDiagnosis.isEnabled = true
                         progressBarSave.visibility = View.GONE // ✅ hide spinner
-                }
+                    }
 
             } catch (e: Exception) {
                 println("ERROR MainActivity: Exception during save: ${e.message}")
@@ -622,6 +689,8 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         intent.type = "image/*"
         pickImageLauncher.launch(intent)
+        // ... your existing result handling code ...
+
     }
 
     private fun loadImageFromUri(uri: Uri) {
@@ -630,19 +699,21 @@ class MainActivity : AppCompatActivity() {
             selectedBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream?.close()
 
-            // Display image
             imageView.setImageBitmap(selectedBitmap)
             tvResults.text = "Analyzing image..."
-
-            // Clear old detections and reset button
             currentDetections = null
-            resetSaveButton()  // Add this line
-            updateSaveButtonState()  // This will hide the button
+            resetSaveButton()
+            updateSaveButtonState()
             aiInsightsText = null
-            // Automatically perform detection
-            selectedBitmap?.let { bitmap ->
-                performDetection(bitmap)
+
+            // ── Tutorial: advance to step 3 (Diagnosis Results spotlight) ──
+            if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
+                val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
+                tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
             }
+
+            selectedBitmap?.let { performDetection(it) }
 
         } catch (e: IOException) {
             Toast.makeText(this, "Error loading image: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -730,7 +801,14 @@ class MainActivity : AppCompatActivity() {
                         btnSelectImage.isEnabled = true
                         updateSaveButtonState()
                         // Show Consult AI even for healthy plants (user might want advice)
-                        btnConsultAI.visibility = View.VISIBLE
+                        // Automatically trigger AI consultation after result is shown
+                        if (isTutorialActive && ::tutorialManager.isInitialized) {
+                            val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                            card.post {
+                                tutorialManager.onAnalysisComplete()
+                            }
+                        }
+                        consultAI()
                         return@launch
                     }
 
@@ -757,8 +835,14 @@ class MainActivity : AppCompatActivity() {
                     btnSelectImage.isEnabled = true
                     updateSaveButtonState()
 
-                    // ✅ SHOW CONSULT AI BUTTON when diseases are detected
-                    btnConsultAI.visibility = View.VISIBLE
+                    // Automatically trigger AI consultation after diseases are detected
+                    if (isTutorialActive && ::tutorialManager.isInitialized) {
+                        val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                        card.post {
+                            tutorialManager.onAnalysisComplete()
+                        }
+                    }
+                    consultAI()
 
                 }.onFailure { exception ->
                     // ⚠️ IMPROVED: PlantNet API failed - be conservative
@@ -1033,14 +1117,13 @@ class MainActivity : AppCompatActivity() {
         layout.background = gradientDrawable
     }
     private fun consultAI() {
-        if (currentDetections.isNullOrEmpty() || selectedBitmap == null) {
+        if (selectedBitmap == null || currentDetections == null) {
             Toast.makeText(this, "No diagnosis available to consult", Toast.LENGTH_SHORT).show()
             return
         }
 
         // Hide the Consult AI button and show AI chat interface
-        val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
-        btnConsultAI.visibility = View.GONE
+
 
         // Show the AI chat interface in the FrameLayout
         showAIChatInFrame()
@@ -1049,84 +1132,103 @@ class MainActivity : AppCompatActivity() {
     private fun showAIChatInFrame() {
         val frameResults: FrameLayout = findViewById(R.id.frameResults)
 
-        // ✅ BETTER APPROACH: Don't remove original views, just hide them
-        // Find the original diagnosis layout
+        // Hide the original diagnosis layout (don't remove it so it can be restored)
         val originalLayout = frameResults.getChildAt(0)
-        originalLayout?.visibility = View.GONE  // Hide instead of remove
+        originalLayout?.visibility = View.GONE
 
-        // Inflate the chat layout into the FrameLayout
+        // Inflate the chat layout
         val chatView = layoutInflater.inflate(R.layout.layout_inline_chat, frameResults, false)
-        frameResults.addView(chatView)  // Add chat as second child
+        frameResults.addView(chatView)
 
-        // Initialize chat components
-        val recyclerChat: RecyclerView = chatView.findViewById(R.id.recyclerChat)
-        val etChatMessage: EditText = chatView.findViewById(R.id.etChatMessage)
-        val btnSendChat: ImageButton = chatView.findViewById(R.id.btnSendChat)
-        val progressChat: ProgressBar = chatView.findViewById(R.id.progressChat)
-        val btnCloseChat: ImageButton = chatView.findViewById(R.id.btnCloseChat)
+        // Wire up views
+        val recyclerChat: RecyclerView    = chatView.findViewById(R.id.recyclerChat)
+        val etChatMessage: EditText       = chatView.findViewById(R.id.etChatMessage)
+        val btnSendChat: ImageButton      = chatView.findViewById(R.id.btnSendChat)
+        val progressChat: ProgressBar     = chatView.findViewById(R.id.progressChat)
+        val btnCloseChat: ImageButton     = chatView.findViewById(R.id.btnCloseChat)
 
-        // Set up RecyclerView with onSaveClick callback
+        // Chat list and adapter
         val chatMessages = mutableListOf<ChatMessage>()
-        val chatAdapter = ChatAdapter(chatMessages) { aiResponse ->
+        val chatAdapter  = ChatAdapter(chatMessages) { aiResponse ->
             aiInsightsText = aiResponse
             Toast.makeText(this, "AI insights saved to diagnosis", Toast.LENGTH_SHORT).show()
         }
         recyclerChat.layoutManager = LinearLayoutManager(this)
-        recyclerChat.adapter = chatAdapter
+        recyclerChat.adapter        = chatAdapter
 
-        // Initialize Gemini with output limits
+        // Gemini model — identical config to your original
         val generativeModel = GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
-            apiKey = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0",
+            modelName   = "gemini-2.5-flash-lite",
+            apiKey      = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0",
             generationConfig = generationConfig {
-                temperature = 0.7f
-                topK = 40
-                topP = 0.95f
+                temperature    = 0.7f
+                topK           = 40
+                topP           = 0.95f
                 maxOutputTokens = 500
             }
         )
 
-        // Send concise initial diagnosis message
+        // ── Build the initial diagnosis prompt (same logic as your original) ──────
         val diagnosisText = tvResults.text.toString()
-        val initialPrompt = """
-        I've detected the following on a strawberry plant:
-        
+        val isHealthy     = currentDetections?.isEmpty() == true
+
+        val initialPrompt = if (isHealthy) {
+            """
+        A strawberry plant was scanned and no diseases were detected:
+ 
         $diagnosisText
-        
-        Provide a BRIEF analysis (max 150 words) with bullet points covering:
+ 
+        Provide a BRIEF response (max 100 words) with bullet points covering:
+        1. What a healthy strawberry plant needs to stay disease-free
+        2. Preventive care tips
+        3. Signs to watch out for in the future
+        """.trimIndent()
+        } else {
+            """
+        The  detected the following on a strawberry plant:
+ 
+        $diagnosisText
+ 
+        Provide a BRIEF analysis (max 100 words) with bullet points covering:
         1. What this condition means
         2. Immediate treatment steps
         3. Prevention tips
-    """.trimIndent()
+        """.trimIndent()
+        }
 
-        // Add user message with image
-        chatMessages.add(ChatMessage(
-            message = initialPrompt,
-            isUser = true,
-            image = selectedBitmap
-        ))
+        // ── FIX: mark this message so it is NEVER included in follow-up history ──
+        chatMessages.add(
+            ChatMessage(
+                message            = initialPrompt,
+                isUser             = true,
+                image              = selectedBitmap,
+                excludeFromHistory = true          // ← KEY FIX
+            )
+        )
         chatAdapter.notifyItemInserted(chatMessages.size - 1)
         recyclerChat.scrollToPosition(chatMessages.size - 1)
 
-        // Show loading
-        progressChat.visibility = View.VISIBLE
-        btnSendChat.isEnabled = false
+        progressChat.visibility  = View.VISIBLE
+        btnSendChat.isEnabled    = false
 
-        // Get AI response
+        // ── Send initial diagnosis to Gemini (with image) ─────────────────────────
         lifecycleScope.launch {
             try {
                 val inputContent = content {
                     image(selectedBitmap!!)
                     text("$SYSTEM_PROMPT\n\nUser: $initialPrompt")
                 }
-                val response = generativeModel.generateContent(inputContent)
-                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response."
+                val response       = generativeModel.generateContent(inputContent)
+                val aiResponseText = response.text?.trim()
+                    ?: "I apologize, but I couldn't generate a response."
 
-                chatMessages.add(ChatMessage(
-                    message = aiResponseText,
-                    isUser = false,
-                    canBeSaved = false
-                ))
+                chatMessages.add(
+                    ChatMessage(
+                        message    = aiResponseText,
+                        isUser     = false,
+                        canBeSaved = false
+                    )
+                )
                 chatAdapter.notifyItemInserted(chatMessages.size - 1)
                 recyclerChat.scrollToPosition(chatMessages.size - 1)
 
@@ -1134,141 +1236,118 @@ class MainActivity : AppCompatActivity() {
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error getting AI response", e)
-                val errorMessage = "Sorry, I encountered an error: ${e.message}"
-                chatMessages.add(ChatMessage(
-                    message = errorMessage,
-                    isUser = false,
-                    canBeSaved = false
-                ))
+                chatMessages.add(
+                    ChatMessage(
+                        message    = "Sorry, I encountered an error: ${e.message}",
+                        isUser     = false,
+                        canBeSaved = false
+                    )
+                )
                 chatAdapter.notifyItemInserted(chatMessages.size - 1)
                 recyclerChat.scrollToPosition(chatMessages.size - 1)
             } finally {
                 progressChat.visibility = View.GONE
-                btnSendChat.isEnabled = true
+                btnSendChat.isEnabled   = true
             }
         }
 
-        // Handle send button
+        // ── Handle follow-up messages from the user ───────────────────────────────
         btnSendChat.setOnClickListener {
             val messageText = etChatMessage.text.toString().trim()
             if (messageText.isEmpty()) {
                 Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            // ✅ BUILD HISTORY FIRST (before adding new message)
-            val conversationHistory = buildString {
-                append(SYSTEM_PROMPT)
-                append("\n\n")
 
-                chatMessages.takeLast(10).forEach { msg ->
-                    if (msg.isUser) {
-                        append("User: ${msg.message}\n\n")
-                    } else {
-                        append("Assistant: ${msg.message}\n\n")
-                    }
-                }
-
-                append("User: $messageText\n\nAssistant (respond in max 150 words with bullet points):")
-            }
-
+            // Add user message to the list FIRST, then build history from the list
             chatMessages.add(ChatMessage(messageText, isUser = true))
             chatAdapter.notifyItemInserted(chatMessages.size - 1)
             recyclerChat.scrollToPosition(chatMessages.size - 1)
             etChatMessage.text?.clear()
+            aiInsightsText = if (aiInsightsText.isNullOrEmpty()) {
+                "You: $messageText"
+            } else {
+                "$aiInsightsText\n\nYou: $messageText"
+            }
 
             progressChat.visibility = View.VISIBLE
-            btnSendChat.isEnabled = false
+            btnSendChat.isEnabled   = false
 
             lifecycleScope.launch {
                 try {
+                    // ── FIX: filter out the initial diagnosis prompt before building
+                    //         history so the AI never sees it again in follow-ups ──
                     val conversationHistory = buildString {
                         append(SYSTEM_PROMPT)
                         append("\n\n")
-                        chatMessages.takeLast(10).forEach { msg ->
-                            if (msg.isUser) {
-                                append("User: ${msg.message}\n\n")
-                            } else {
-                                append("Assistant: ${msg.message}\n\n")
+
+                        chatMessages
+                            .filter { !it.excludeFromHistory }   // ← KEY FIX
+                            .takeLast(10)
+                            .forEach { msg ->
+                                if (msg.isUser) {
+                                    append("User: ${msg.message}\n\n")
+                                } else {
+                                    append("Assistant: ${msg.message}\n\n")
+                                }
                             }
-                        }
-                        append("User: $messageText\n\nAssistant (respond in max 150 words with bullet points):")
+
+                        // The last entry in chatMessages is already the new user
+                        // message we added above, so we don't append it again —
+                        // we just close with "Assistant:" to prompt the model.
+                        append("Assistant:")
                     }
 
-                    val response = generativeModel.generateContent(conversationHistory)
-                    val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response."
+                    val response       = generativeModel.generateContent(conversationHistory)
+                    val aiResponseText = response.text?.trim()
+                        ?: "I apologize, but I couldn't generate a response."
 
-                    chatMessages.add(ChatMessage(
-                        message = aiResponseText,
-                        isUser = false,
-                        canBeSaved = false
-                    ))
+                    chatMessages.add(
+                        ChatMessage(
+                            message    = aiResponseText,
+                            isUser     = false,
+                            canBeSaved = false
+                        )
+                    )
                     chatAdapter.notifyItemInserted(chatMessages.size - 1)
                     recyclerChat.scrollToPosition(chatMessages.size - 1)
 
-                    aiInsightsText = if (aiInsightsText.isNullOrEmpty()) {
-                        aiResponseText
-                    } else {
-                        "$aiInsightsText\n\n---\n\n$aiResponseText"
-                    }
+                    // Append to saved insights (same behaviour as your original)
+                    aiInsightsText = "$aiInsightsText\n\nAI: $aiResponseText"
 
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error getting AI response", e)
-                    chatMessages.add(ChatMessage(
-                        message = "Sorry, I encountered an error: ${e.message}",
-                        isUser = false,
-                        canBeSaved = false
-                    ))
+                    chatMessages.add(
+                        ChatMessage(
+                            message    = "Sorry, I encountered an error: ${e.message}",
+                            isUser     = false,
+                            canBeSaved = false
+                        )
+                    )
                     chatAdapter.notifyItemInserted(chatMessages.size - 1)
                     recyclerChat.scrollToPosition(chatMessages.size - 1)
                 } finally {
                     progressChat.visibility = View.GONE
-                    btnSendChat.isEnabled = true
+                    btnSendChat.isEnabled   = true
                 }
             }
         }
 
-        // ✅ IMPROVED: Handle close button - restore original views
+        // ── Close button: restore original diagnosis layout ───────────────────────
         btnCloseChat.setOnClickListener {
             try {
-                // Remove the chat view
                 frameResults.removeView(chatView)
-
-                // Show the original diagnosis layout again
                 originalLayout?.visibility = View.VISIBLE
 
-                // Make sure the Consult AI button is visible
                 val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
-                btnConsultAI.visibility = View.VISIBLE
+                btnConsultAI.visibility  = View.VISIBLE
 
                 Toast.makeText(this, "Chat closed", Toast.LENGTH_SHORT).show()
-
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error closing chat", e)
                 Toast.makeText(this, "Error closing chat: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-
-    // Add this new method to MainActivity to handle AI insights
-    private fun appendAiInsightsToDiagnosis(aiInsights: String) {
-        val currentText = tvResults.text.toString()
-        aiInsightsText = aiInsights
-        // Add separator and AI insights
-        val updatedText = buildString {
-            append(currentText)
-            append("\n\n")
-            append("═".repeat(30))
-            append("\n🤖 AI EXPERT INSIGHTS:\n")
-            append("═".repeat(30))
-            append("\n\n")
-            append(aiInsights)
-        }
-
-        tvResults.text = updatedText
-
-        // Scroll to show the new content
-
     }
     private fun showAboutDialog() {
         val aboutMessage = """
@@ -1311,12 +1390,61 @@ class MainActivity : AppCompatActivity() {
         val chatDialog = ChatBottomSheetDialog()
         chatDialog.show(supportFragmentManager, "ChatBottomSheetDialog")
     }
+    // ── Tutorial ──────────────────────────────────────────────────────────────────
+
+    private fun showTutorialIfNeeded() {
+        val user = auth.currentUser ?: return
+
+        tutorialManager = TutorialManager(activity = this, userId = user.uid)
+        if (!tutorialManager.shouldShowTutorial()) return
+
+        isTutorialActive = true
+
+        val imageSourceCard  = findViewById<MaterialCardView>(R.id.cardImageSource)
+        val diagnosisCard    = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+        val saveDiagnosisBtn = findViewById<Button>(R.id.btnSaveDiagnosis)
+        val navView          = findViewById<NavigationView>(R.id.navigation_view)  // ← ADD
+
+        imageSourceCard.post {
+            val imagePreview = findViewById<ImageView>(R.id.imageView)
+
+            tutorialManager.startTutorial(
+                userName            = user.displayName ?: "Grower",
+                imageSourceCard     = imageSourceCard,
+                imagePreview        = imagePreview,
+                diagnosisCard       = diagnosisCard,
+                saveDiagnosisButton = saveDiagnosisBtn,
+                drawerLayout        = drawerLayout,   // ← ADD (already a field in MainActivity)
+                navigationView      = navView         // ← ADD
+            )
+        }
+    }
+    // 2. Add this function anywhere in MainActivity
+    private fun showNoInternetDialog() {
+        if (noInternetDialog?.isShowing == true) return  // already showing
+
+        noInternetDialog = AlertDialog.Builder(this)
+            .setTitle("⚠️ No Internet Connection")
+            .setMessage("Please check your Wi-Fi or mobile data connection to use GrowMate.")
+            .setCancelable(false)                        // cannot be dismissed
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .create()
+
+        noInternetDialog?.show()
+    }
+
+    private fun dismissNoInternetDialog() {
+        noInternetDialog?.dismiss()
+        noInternetDialog = null
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()
         coroutineScope.cancel()
         detector.close()
         selectedBitmap?.recycle()
+        networkMonitor.stop()
     }
 }
 
