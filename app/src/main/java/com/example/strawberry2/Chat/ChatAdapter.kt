@@ -73,13 +73,23 @@ class ChatAdapter(
     ) : RecyclerView.ViewHolder(itemView) {
         private val tvMessage: TextView = itemView.findViewById(R.id.tvMessage)
         private val btnSaveResponse: Button? = itemView.findViewById(R.id.btnSaveResponse)
+        private val ivDiagnosisImageChat: ImageView? = itemView.findViewById(R.id.ivDiagnosisImageChat)
 
         fun bind(message: ChatMessage) {
             val markwon = io.noties.markwon.Markwon.create(itemView.context)
             markwon.setMarkdown(tvMessage, message.message)
-            // Show save button if this message can be saved
+
+            // Show the strawberry image (e.g. in the greeting when launched from history)
+            if (message.image != null && ivDiagnosisImageChat != null) {
+                ivDiagnosisImageChat.setImageBitmap(message.image)
+                ivDiagnosisImageChat.visibility = View.VISIBLE
+            } else if (ivDiagnosisImageChat != null) {
+                ivDiagnosisImageChat.visibility = View.GONE
+            }
+
+            // Show save button only when explicitly flagged
             if (message.canBeSaved && btnSaveResponse != null) {
-                btnSaveResponse.visibility = View.VISIBLE
+                btnSaveResponse.visibility = View.GONE
                 btnSaveResponse.setOnClickListener {
                     onSaveClick(message.message)
                 }

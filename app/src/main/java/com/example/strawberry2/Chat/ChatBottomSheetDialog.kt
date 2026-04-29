@@ -1,5 +1,6 @@
 package com.example.strawberry2.Chat
 
+import android.content.DialogInterface
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
@@ -21,7 +22,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.launch
 
-
 import android.widget.FrameLayout
 import com.google.ai.client.generativeai.type.content
 
@@ -29,6 +29,10 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 import kotlinx.coroutines.launch
+
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 class ChatBottomSheetDialog : BottomSheetDialogFragment() {
@@ -44,13 +48,20 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
 
     private var initialMessage: String? = null
     private var diagnosisImage: Bitmap? = null
+    private var diagnosisContext: String? = null  // ← injected context from saved diagnosis
     private var onAiResponseSaved: ((String) -> Unit)? = null
+
+    /**
+     * Called when the user closes the chat if there are any meaningful messages in the
+     * conversation (i.e. at least one user message and one AI reply).
+     * Receives a formatted markdown transcript that can be appended to aiInsights.
+     */
+    private var onConversationEnded: ((String) -> Unit)? = null
 
     private val generativeModel by lazy {
         GenerativeModel(
-            // ✅ FIX 1: Use correct stable model name
-            modelName = "gemini-2.5-flash-lite", // Updated to stable version
-            apiKey = GEMINI_API_KEY, // ⚠️ IMPORTANT: Replace with your NEW API key
+            modelName = "gemini-2.5-flash-lite",
+            apiKey = GEMINI_API_KEY,
             generationConfig = generationConfig {
                 temperature = 0.7f
                 topK = 40
@@ -61,10 +72,9 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
     }
 
     companion object {
-        // ⚠️ FIX 2: REPLACE THIS WITH YOUR NEW API KEY FROM GOOGLE AI STUDIO
-        // Get a new key from: https://makersuite.google.com/app/apikey
         private const val GEMINI_API_KEY = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0"
         private const val ARG_INITIAL_MESSAGE = "initial_message"
+        private const val ARG_DIAGNOSIS_CONTEXT = "diagnosis_context"
 
         private const val SYSTEM_PROMPT = """You are an expert agricultural AI assistant specializing in strawberry plants and their diseases. 
 
@@ -110,16 +120,18 @@ Example format:
         fun newInstance(
             initialMessage: String? = null,
             image: Bitmap? = null,
-            onAiResponseSaved: ((String) -> Unit)? = null
+            diagnosisContext: String? = null,
+            onAiResponseSaved: ((String) -> Unit)? = null,
+            onConversationEnded: ((String) -> Unit)? = null
         ): ChatBottomSheetDialog {
             val fragment = ChatBottomSheetDialog()
             val args = Bundle()
-            initialMessage?.let {
-                args.putString(ARG_INITIAL_MESSAGE, it)
-            }
+            initialMessage?.let { args.putString(ARG_INITIAL_MESSAGE, it) }
+            diagnosisContext?.let { args.putString(ARG_DIAGNOSIS_CONTEXT, it) }
             fragment.arguments = args
             fragment.diagnosisImage = image
             fragment.onAiResponseSaved = onAiResponseSaved
+            fragment.onConversationEnded = onConversationEnded
             return fragment
         }
     }
@@ -128,6 +140,7 @@ Example format:
         super.onCreate(savedInstanceState)
         arguments?.let {
             initialMessage = it.getString(ARG_INITIAL_MESSAGE)
+            diagnosisContext = it.getString(ARG_DIAGNOSIS_CONTEXT)
         }
     }
 
@@ -147,7 +160,10 @@ Example format:
         setupRecyclerView()
         setupClickListeners()
 
-        if (initialMessage != null) {
+        if (diagnosisContext != null) {
+            // Opened from DiagnosisHistory — show context-aware welcome, no initial user message
+            sendContextAwareWelcomeMessage(diagnosisContext!!)
+        } else if (initialMessage != null) {
             sendWelcomeMessage()
             view.postDelayed({
                 processDiagnosisWithImage(initialMessage!!, diagnosisImage)
@@ -155,6 +171,55 @@ Example format:
         } else {
             sendWelcomeMessage()
         }
+    }
+
+    /**
+     * When the dialog is dismissed (user presses close or taps outside), check if there
+     * are any real user↔AI exchanges and, if so, build a transcript and fire the callback
+     * so the caller can persist it.
+     */
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        fireConversationEndedIfNeeded()
+    }
+
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private fun fireConversationEndedIfNeeded() {
+        val callback = onConversationEnded ?: return
+
+        // Collect only genuine user/AI exchanges (skip system welcome banners)
+        val exchangeMessages = messages.filter { msg ->
+            msg.isUser ||
+                    (msg.canBeSaved && !msg.message.contains("Hello! 🍓") &&
+                            !msg.message.contains("I've loaded your saved"))
+        }
+
+        // Need at least one user message AND one AI reply to be worth saving
+        val hasUserMessage = exchangeMessages.any { it.isUser }
+        val hasAiReply    = exchangeMessages.any { !it.isUser }
+        if (!hasUserMessage || !hasAiReply) return
+
+        val timestamp = SimpleDateFormat(
+            "MMM dd, yyyy 'at' hh:mm a", Locale.getDefault()
+        ).format(Date())
+
+        val transcript = buildString {
+            appendLine("---")
+            appendLine("**Follow-up Chat — $timestamp**")
+            appendLine()
+            exchangeMessages.forEach { msg ->
+                if (msg.isUser) {
+                    appendLine("**You:** ${msg.message}")
+                } else {
+                    appendLine("**AI Expert:** ${msg.message}")
+                }
+                appendLine()
+            }
+            appendLine("---")
+        }
+
+        callback(transcript)
     }
 
     private fun initializeViews(view: View) {
@@ -206,6 +271,28 @@ Example format:
         scrollToBottom()
     }
 
+    private fun sendContextAwareWelcomeMessage(context: String) {
+        // Parse detections from context for a personalized greeting
+        val hasDetections = context.contains("•") && !context.contains("No diseases detected")
+        val greeting = if (hasDetections) {
+            "Hello! 🍓 I've loaded your saved diagnosis report.\n\n" +
+                    "I can see the **detections and AI insights** from this scan. " +
+                    "Ask me anything — follow-up questions, treatment options, prevention tips, or anything else about these findings!"
+        } else {
+            "Hello! 🍓 I've loaded your saved diagnosis report.\n\n" +
+                    "It looks like your plant was **healthy** in this scan! " +
+                    "Feel free to ask me any questions about strawberry plant care or disease prevention."
+        }
+        val welcomeMessage = ChatMessage(
+            message = greeting,
+            isUser = false,
+            canBeSaved = false,
+            image = diagnosisImage          // ← attach the strawberry image to the greeting
+        )
+        chatAdapter.addMessage(welcomeMessage)
+        scrollToBottom()
+    }
+
     private fun processDiagnosisWithImage(message: String, image: Bitmap?) {
         val userMessage = ChatMessage(
             message = message,
@@ -219,7 +306,6 @@ Example format:
 
         lifecycleScope.launch {
             try {
-                // ✅ FIX 3: Improved error handling and response parsing
                 val response = if (image != null) {
                     val inputContent = content {
                         image(image)
@@ -230,8 +316,8 @@ Example format:
                     generativeModel.generateContent("$SYSTEM_PROMPT\n\nUser: $message")
                 }
 
-                // ✅ FIX 4: Better null safety
-                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response. Please try again."
+                val aiResponseText = response.text?.trim()
+                    ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
@@ -245,19 +331,8 @@ Example format:
                 scrollToBottom()
 
             } catch (e: Exception) {
-                // ✅ FIX 5: Better error handling
                 Log.e("ChatDialog", "Error generating response", e)
-                val errorMessage = when {
-                    e.message?.contains("API_KEY_INVALID") == true ->
-                        "⚠️ API Key is invalid. Please update your API key."
-                    e.message?.contains("quota") == true ->
-                        "⚠️ API quota exceeded. Please try again later."
-                    e.message?.contains("network") == true ->
-                        "⚠️ Network error. Please check your connection."
-                    else ->
-                        "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
-                }
-
+                val errorMessage = buildErrorMessage(e)
                 val errorMsg = ChatMessage(
                     message = "Sorry, I encountered an error: $errorMessage",
                     isUser = false,
@@ -265,7 +340,6 @@ Example format:
                 )
                 chatAdapter.addMessage(errorMsg)
                 scrollToBottom()
-
                 Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
@@ -294,21 +368,26 @@ Example format:
     private fun getAIResponse(userMessage: String) {
         lifecycleScope.launch {
             try {
-                // ✅ FIX 6: Simplified conversation history building
                 val conversationHistory = buildString {
-                    if (messages.size <= 2) {
-                        append(SYSTEM_PROMPT)
+                    append(SYSTEM_PROMPT)
+                    append("\n\n")
+
+                    // ── Inject saved diagnosis context when coming from history ──
+                    if (!diagnosisContext.isNullOrEmpty()) {
+                        append("IMPORTANT CONTEXT — The user is asking follow-up questions about a previously saved diagnosis. ")
+                        append("Use the details below as the reference for this entire conversation:\n\n")
+                        append(diagnosisContext)
                         append("\n\n")
                     }
 
-
-                    // Include last 5 message pairs for context (to avoid token limits)
+                    // Include last 4 messages for conversational context (avoid token limits)
                     val recentMessages = messages
                         .filter {
                             !it.message.contains("Hello! 🍓") &&
-                                    !it.message.contains("What it means:", ignoreCase = true) // ❌ exclude long diagnosis format
+                                    !it.message.contains("I've loaded your saved") &&
+                                    !it.message.contains("What it means:", ignoreCase = true)
                         }
-                        .takeLast(4) // ✅ only keep last 2 exchanges (user + AI)
+                        .takeLast(4)
 
                     recentMessages.forEach { msg ->
                         if (msg.isUser) {
@@ -322,10 +401,12 @@ Example format:
                 }
 
                 val response = generativeModel.generateContent(conversationHistory)
-                val aiResponseText = response.text?.trim() ?: "I apologize, but I couldn't generate a response. Please try again."
+                val aiResponseText = response.text?.trim()
+                    ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
+                // Note: diagnosisContext flow is auto-saved via onConversationEnded callback
 
                 val aiMessage = ChatMessage(
                     message = aiResponseText,
@@ -337,17 +418,7 @@ Example format:
 
             } catch (e: Exception) {
                 Log.e("ChatDialog", "Error in getAIResponse", e)
-                val errorMessage = when {
-                    e.message?.contains("API_KEY_INVALID") == true ->
-                        "⚠️ API Key is invalid. Please update your API key."
-                    e.message?.contains("quota") == true ->
-                        "⚠️ API quota exceeded. Please try again later."
-                    e.message?.contains("network") == true ->
-                        "⚠️ Network error. Please check your connection."
-                    else ->
-                        "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
-                }
-
+                val errorMessage = buildErrorMessage(e)
                 val errorMsg = ChatMessage(
                     message = "Sorry, I encountered an error: $errorMessage",
                     isUser = false,
@@ -355,12 +426,22 @@ Example format:
                 )
                 chatAdapter.addMessage(errorMsg)
                 scrollToBottom()
-
                 Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
             }
         }
+    }
+
+    private fun buildErrorMessage(e: Exception): String = when {
+        e.message?.contains("API_KEY_INVALID") == true ->
+            "⚠️ API Key is invalid. Please update your API key."
+        e.message?.contains("quota") == true ->
+            "⚠️ API quota exceeded. Please try again later."
+        e.message?.contains("network") == true ->
+            "⚠️ Network error. Please check your connection."
+        else ->
+            "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
     }
 
     private fun saveAiResponse(aiResponse: String) {

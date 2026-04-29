@@ -91,6 +91,38 @@ class DiagnosisRepository {
         }
     }
 
+    /**
+     * Appends a follow-up chat transcript to an existing diagnosis's aiInsights field.
+     * The new [chatTranscript] is appended after a divider so the original insights
+     * are always preserved.
+     */
+    suspend fun updateAiInsights(diagnosisId: String, chatTranscript: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Fetch the current insights so we can append to them
+                val snapshot = diagnosesCollection.document(diagnosisId).get().await()
+                val currentInsights = snapshot.getString("aiInsights") ?: ""
+
+                val updatedInsights = if (currentInsights.isNotBlank()) {
+                    "$currentInsights\n\n$chatTranscript"
+                } else {
+                    chatTranscript
+                }
+
+                diagnosesCollection.document(diagnosisId)
+                    .update("aiInsights", updatedInsights)
+                    .await()
+
+                println("DEBUG: Updated aiInsights for diagnosis: $diagnosisId")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                println("ERROR: Failed to update aiInsights: ${e.message}")
+                e.printStackTrace()
+                Result.failure(e)
+            }
+        }
+    }
+
     // Get all diagnoses for a specific user
     suspend fun getUserDiagnoses(userId: String): Result<List<DiagnosisData>> {
         return try {

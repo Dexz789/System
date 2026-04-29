@@ -54,6 +54,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.navigation.NavigationView
+import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -136,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var imageView: ImageView
     private lateinit var networkMonitor: NetworkMonitor
     private var noInternetDialog: AlertDialog? = null
+    private var slowConnectionSnackbar: Snackbar? = null
     private lateinit var btnSelectImage: MaterialCardView
     private lateinit var tvResults: TextView
     private lateinit var auth: FirebaseAuth
@@ -233,15 +235,24 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        networkMonitor = NetworkMonitor(this) { isConnected ->
-            runOnUiThread {
-                if (isConnected) {
-                    dismissNoInternetDialog()
-                } else {
-                    showNoInternetDialog()
+        networkMonitor = NetworkMonitor(
+            context = this,
+            onStatusChange = { isConnected ->
+                runOnUiThread {
+                    if (isConnected) {
+                        dismissNoInternetDialog()
+                    } else {
+                        dismissSlowConnectionBanner()   // slow banner is redundant once fully offline
+                        showNoInternetDialog()
+                    }
+                }
+            },
+            onSlowConnection = { isSlow ->
+                runOnUiThread {
+                    if (isSlow) showSlowConnectionBanner() else dismissSlowConnectionBanner()
                 }
             }
-        }
+        )
         networkMonitor.start()
 
 // Show immediately on launch if already offline
@@ -1436,6 +1447,31 @@ class MainActivity : AppCompatActivity() {
     private fun dismissNoInternetDialog() {
         noInternetDialog?.dismiss()
         noInternetDialog = null
+    }
+
+    private fun showSlowConnectionBanner() {
+        // Don't stack on top of the no-internet dialog
+        if (noInternetDialog?.isShowing == true) return
+        if (slowConnectionSnackbar?.isShown == true) return   // already visible
+
+        val rootView = findViewById<View>(android.R.id.content)
+        slowConnectionSnackbar = Snackbar.make(
+            rootView,
+            "🐢 Slow connection detected — some features may take longer",
+            Snackbar.LENGTH_INDEFINITE
+        ).apply {
+            setAction("Dismiss") { dismissSlowConnectionBanner() }
+            // Amber warning colour so it's visually distinct from the error dialog
+            setBackgroundTint(android.graphics.Color.parseColor("#F59E0B"))
+            setTextColor(android.graphics.Color.WHITE)
+            setActionTextColor(android.graphics.Color.WHITE)
+            show()
+        }
+    }
+
+    private fun dismissSlowConnectionBanner() {
+        slowConnectionSnackbar?.dismiss()
+        slowConnectionSnackbar = null
     }
 
 

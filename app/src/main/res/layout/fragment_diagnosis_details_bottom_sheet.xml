@@ -299,6 +299,31 @@
                         android:lineSpacingMultiplier="1.5"
                         android:textColor="#212121" />
 
+                    <!-- Divider before button -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:background="#BBDEFB" />
+
+                    <!-- Continue Chat with AI button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnContinueChatWithAI"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="16dp"
+                        android:text="💬  Continue Chat with AI"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/idk"
+                        app:cornerRadius="12dp"
+                        app:icon="@null" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

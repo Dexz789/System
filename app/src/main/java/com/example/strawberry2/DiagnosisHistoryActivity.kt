@@ -121,6 +121,13 @@ class DiagnosisHistoryActivity : AppCompatActivity() {
 
                     true
                 }
+                R.id.nav_profile -> {
+                    if (currentActivity != "ProfileActivity") {
+                        startActivity(Intent(this, ProfileActivity::class.java))
+                    }
+                    drawerLayout.closeDrawers()
+                    true
+                }
                 R.id.nav_settings -> {
                     if (currentActivity != "SettingsActivity") {
                         startActivity(Intent(this, MainActivity::class.java))
