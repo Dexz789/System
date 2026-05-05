@@ -152,6 +152,7 @@ class MainActivity : AppCompatActivity() {
     // Camera capture launcher
 
 
+    // Camera capture launcher
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -160,38 +161,21 @@ class MainActivity : AppCompatActivity() {
             bitmap?.let {
                 selectedBitmap = it
                 imageView.setImageBitmap(it)
-                val takePictureLauncher = registerForActivityResult(
-                    ActivityResultContracts.StartActivityForResult()
-                ) { result ->
-                    if (result.resultCode == Activity.RESULT_OK) {
-                        val bitmap = result.data?.extras?.get("data") as? Bitmap
-                        bitmap?.let {
-                            selectedBitmap = it
-                            imageView.setImageBitmap(it)
-                            tvResults.text = "Analyzing captured image..."
-                            currentDetections = null
-                            resetSaveButton()
-                            updateSaveButtonState()
-                            aiInsightsText = null
-
-                            // ── Tutorial: advance to step 3 ──
-                            if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
-                                val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
-                                val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
-                                tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
-                            }
-
-                            performDetection(it)
-                        }
-                    }
-                }
                 tvResults.text = "Analyzing captured image..."
 
                 // Clear old detections and reset button
                 currentDetections = null
-                resetSaveButton()  // Add this line
-                updateSaveButtonState()  // This will hide the button
+                resetSaveButton()
+                updateSaveButtonState()
                 aiInsightsText = null
+
+                // ── Tutorial: advance to step 3 ──
+                if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
+                    val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                    val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
+                    tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
+                }
+
                 performDetection(it)
             }
         }
