@@ -63,6 +63,7 @@ class TutorialManager(
     private var diagnosisCardRef: View? = null
     private var nestedScrollRef: NestedScrollView? = null
     private var imagePreviewRef: View? = null
+    private var imageSourceCardRef: View? = null
     private var saveDiagnosisButtonRef: View? = null
     private var drawerLayoutRef: androidx.drawerlayout.widget.DrawerLayout? = null
     private var pastReportsMenuItemRef: View? = null
@@ -105,7 +106,8 @@ class TutorialManager(
     ) {
         this.saveDiagnosisButtonRef = saveDiagnosisButton
         this.drawerLayoutRef        = drawerLayout
-        this.navigationViewRef      = navigationView              // ← store it (add field below)
+        this.navigationViewRef      = navigationView
+        this.imageSourceCardRef     = imageSourceCard              // ← store it (add field below)
         showWelcome(
             userName = userName,
             onSkip   = { dismissActive(); markComplete() },
@@ -127,11 +129,10 @@ class TutorialManager(
         diagnosisCardRef = diagnosisCard
         nestedScrollRef  = nestedScroll
 
-        val preview = imagePreviewRef
-        if (preview != null) {
-            showStepImagePreview(preview, diagnosisCard)
-        }
-        // showStep2 is no longer called here — onAnalysisComplete handles it
+        // Skip the image preview step — go straight to the "Analyzing" waiting screen.
+        // onAnalysisComplete() will advance to the Diagnosis Results step once done.
+        analysisState = AnalysisState.USER_WAITING_FOR_ANALYSIS
+        showStepWaitingForAnalysis(diagnosisCard, nestedScroll)
     }
 
     /**
@@ -161,6 +162,32 @@ class TutorialManager(
             }
             AnalysisState.IDLE -> { /* nothing to do */ }
         }
+    }
+
+    /**
+     * Call this from MainActivity when the selected image is not a strawberry (or
+     * when plant verification fails). Dismisses the waiting overlay, resets the
+     * tutorial back to the "waiting for image" state, and spotlights the image
+     * source card again so the user knows to pick a valid strawberry image.
+     */
+    fun onAnalysisRejected() {
+        dismissActive()
+        analysisState = AnalysisState.IDLE
+        isWaitingForImage = true
+
+        val sourceCard = imageSourceCardRef ?: run { dismissAndFinish(); return }
+
+        val overlay = buildOverlay(
+            title       = "🍓  Not a Strawberry Plant",
+            description = "The image you selected doesn't appear to be a strawberry plant. " +
+                    "Please select a clear photo of a strawberry plant to continue the tutorial.",
+            showNext    = false,
+            interactive = true,
+            onNext      = {}
+        )
+        decorView.addView(overlay)
+        activeOverlay = overlay
+        locateSpotlight(overlay, sourceCard)
     }
 
     fun dismiss() = dismissActive()

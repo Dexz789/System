@@ -147,6 +147,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedBitmap: Bitmap? = null
     private var currentDetections: List<ObjectDetector.Detection>? = null
     private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
+    // Holds a reference to the AI chat view currently inflated inside frameResults,
+    // so we can remove exactly that view without fragile index arithmetic.
+    private var activeChatView: View? = null
     private lateinit var tutorialManager: TutorialManager
     var isTutorialActive: Boolean = false
     // Camera capture launcher
@@ -159,8 +162,8 @@ class MainActivity : AppCompatActivity() {
         if (result.resultCode == Activity.RESULT_OK) {
             val bitmap = result.data?.extras?.get("data") as? Bitmap
             bitmap?.let {
+                resetFrameResults()
                 selectedBitmap = it
-                imageView.setImageBitmap(it)
                 tvResults.text = "Analyzing captured image..."
 
                 // Clear old detections and reset button
@@ -282,11 +285,6 @@ class MainActivity : AppCompatActivity() {
 
                     true
                 }
-                R.id.nav_settings -> {
-                    if (currentActivity != "SettingsActivity") {
-                        startActivity(Intent(this, MainActivity::class.java))
-                    }
-                }
 
                 R.id.nav_about -> {
                     if (currentActivity != "AboutActivity") {
@@ -341,6 +339,7 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize views
         imageView = findViewById(R.id.imageView)
+        imageView.visibility = View.GONE   // hidden until annotated result is ready
         btnSelectImage = findViewById(R.id.cardSelectImage)
         tvResults = findViewById(R.id.tvResults)
         guide = findViewById(R.id.cardStrawberryGuide)
@@ -583,6 +582,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    /**
+     * Removes the AI chat view (if one is currently shown) from frameResults and
+     * restores the original diagnosis layout to VISIBLE. Safe to call even when no
+     * chat has ever been opened — it simply does nothing in that case.
+     */
+    private fun resetFrameResults() {
+        val chatView = activeChatView ?: return   // nothing to tear down
+        try {
+            val frameResults = findViewById<FrameLayout>(R.id.frameResults)
+            frameResults?.removeView(chatView)
+            frameResults?.getChildAt(0)?.visibility = View.VISIBLE
+            imageView.visibility = View.GONE   // hide annotated image for fresh analysis
+        } catch (e: Exception) {
+            Log.e("MainActivity", "resetFrameResults error: ${e.message}", e)
+        } finally {
+            activeChatView = null
+        }
+    }
+
     private fun resetSaveButton() {
         val btnSaveDiagnosis = findViewById<Button>(R.id.btnSaveDiagnosis)
         btnSaveDiagnosis.text = "Save Diagnosis"
@@ -690,11 +708,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadImageFromUri(uri: Uri) {
         try {
+            resetFrameResults()
             val inputStream = contentResolver.openInputStream(uri)
             selectedBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream?.close()
 
-            imageView.setImageBitmap(selectedBitmap)
             tvResults.text = "Analyzing image..."
             currentDetections = null
             resetSaveButton()
@@ -769,6 +787,10 @@ class MainActivity : AppCompatActivity() {
                         updateSaveButtonState()
                         // Don't show Consult AI button for non-strawberry plants
                         btnConsultAI.visibility = View.GONE
+                        // Not a strawberry — prompt user to try again
+                        if (isTutorialActive && ::tutorialManager.isInitialized) {
+                            tutorialManager.onAnalysisRejected()
+                        }
                         return@launch
                     }
 
@@ -811,6 +833,7 @@ class MainActivity : AppCompatActivity() {
                     val annotatedBitmap = withContext(Dispatchers.Default) {
                         drawBoundingBoxes(bitmap, detections)
                     }
+                    imageView.visibility = View.VISIBLE
                     imageView.setImageBitmap(annotatedBitmap)
 
                     // Display results text
@@ -859,6 +882,10 @@ class MainActivity : AppCompatActivity() {
                     updateSaveButtonState()
                     // Don't show Consult AI button when verification fails
                     btnConsultAI.visibility = View.GONE
+                    // Plant verification failed — prompt user to try again
+                    if (isTutorialActive && ::tutorialManager.isInitialized) {
+                        tutorialManager.onAnalysisRejected()
+                    }
                 }
 
             } catch (e: Exception) {
@@ -869,6 +896,10 @@ class MainActivity : AppCompatActivity() {
                 updateSaveButtonState()
                 btnConsultAI.visibility = View.GONE
                 e.printStackTrace()
+                // Unexpected error — prompt user to try again
+                if (isTutorialActive && ::tutorialManager.isInitialized) {
+                    tutorialManager.onAnalysisRejected()
+                }
             }
         }
     }
@@ -1134,6 +1165,7 @@ class MainActivity : AppCompatActivity() {
         // Inflate the chat layout
         val chatView = layoutInflater.inflate(R.layout.layout_inline_chat, frameResults, false)
         frameResults.addView(chatView)
+        activeChatView = chatView
 
         // Wire up views
         val recyclerChat: RecyclerView    = chatView.findViewById(R.id.recyclerChat)
@@ -1332,6 +1364,7 @@ class MainActivity : AppCompatActivity() {
         btnCloseChat.setOnClickListener {
             try {
                 frameResults.removeView(chatView)
+                activeChatView = null
                 originalLayout?.visibility = View.VISIBLE
 
                 val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
@@ -1467,5 +1500,3 @@ class MainActivity : AppCompatActivity() {
         networkMonitor.stop()
     }
 }
-
-
