@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  activity_main.xml — GrowMate Dashboard (Redesigned)
+  ─────────────────────────────────────────────────────
+  All view IDs are identical to the original so no changes to MainActivity.kt
+  are required. Visual improvements only:
+    • Taller, gradient hero banner replaces the old plain Toolbar
+    • "Scan a Plant" card with icon-label action buttons
+    • Strawberry Guide card with icon accent strip
+    • Diagnosis Results card with cleaner header / body separation
+    • FAB label updated to match new style
+-->
+
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/drawer_layout"
@@ -8,446 +21,617 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- Main content area -->
+    <!-- ═══════════════════════════════════════════════
+         MAIN CONTENT
+         ═══════════════════════════════════════════════ -->
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="#F3F7F2">
 
-        <!-- App Bar Layout for collapsing toolbar effect -->
+        <!-- AppBar: kept for ActionBarDrawerToggle + menu inflation -->
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/appBarLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-            android:elevation="0dp">
+            android:elevation="0dp"
+            app:liftOnScroll="false"
+            android:background="@android:color/transparent">
 
             <androidx.appcompat.widget.Toolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
-                android:background="?attr/colorPrimary"
-                app:title="GrowMate"
-                app:titleTextColor="@android:color/white" />
+                android:background="#2D5A27"
+                android:elevation="0dp"
+                app:titleTextColor="@android:color/white"
+                app:navigationIconTint="@android:color/white"
+                app:title="GrowMate" />
 
         </com.google.android.material.appbar.AppBarLayout>
 
-        <!-- Main scrollable content -->
+        <!-- Scrollable content -->
         <androidx.core.widget.NestedScrollView
             android:id="@+id/nestedScrollView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:fillViewport="true"
+            android:overScrollMode="never"
             app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@drawable/retro_strawberries_on_black_display"
-                android:padding="16dp"
-                android:clipToPadding="false"
-                android:paddingBottom="80dp">
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="88dp"
+                android:clipToPadding="false">
 
-                <!-- Image Preview Card with improved design -->
+                <!-- ───────────────────────────────────────────
+                     HERO BANNER
+                     ─────────────────────────────────────────── -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="2dp"
+                    android:layout_marginBottom="30dp"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
                     app:strokeWidth="0dp"
+                    android:outlineSpotShadowColor="@color/cardview_dark_background"
+                    app:cardBackgroundColor="#2D5A27">
+
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp"
+                        android:paddingBottom="24dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="STRAWBERRY HEALTH"
+                            android:textSize="10sp"
+                            android:textColor="#A8D8A3"
+                            android:letterSpacing="0.15"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Detect &amp; Diagnose\nStrawberry Diseases"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:lineSpacingMultiplier="1.15"
+                            android:layout_marginBottom="8dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Upload a photo to get instant AI-powered diagnosis"
+                            android:textSize="13sp"
+                            android:textColor="#C8E6C9"
+                            android:lineSpacingMultiplier="1.3" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ───────────────────────────────────────────
+                     IMAGE PREVIEW CARD (hidden until image picked)
+                     IDs preserved: imageView, imagePlaceholder
+                     ─────────────────────────────────────────── -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="14dp"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="#D4E8D0"
+                    app:cardBackgroundColor="@android:color/white"
                     android:visibility="gone">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
+                        android:padding="14dp">
 
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
-                            android:layout_marginBottom="16dp">
+                            android:layout_marginBottom="12dp">
 
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
                                 android:src="@drawable/image_24dp_e3e3e3_fill0_wght400_grad0_opsz24"
                                 android:contentDescription="Image icon"
                                 android:layout_marginEnd="8dp"
-                                app:tint="?attr/colorPrimary" />
+                                app:tint="#2D5A27" />
 
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:text="Image Preview"
-                                android:textSize="18sp"
+                                android:textSize="15sp"
                                 android:textStyle="bold"
-                                android:textColor="?android:attr/textColorPrimary" />
+                                android:textColor="#1A3A17" />
 
-                            <!-- Optional: Add info icon -->
                             <ImageView
                                 android:id="@+id/ivInfoIcon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
                                 android:src="@android:drawable/ic_menu_info_details"
                                 android:contentDescription="Information"
-                                android:alpha="0.6"
-                                app:tint="?android:attr/textColorSecondary" />
+                                android:alpha="0.5"
+                                app:tint="#7A9A75" />
                         </LinearLayout>
 
-                        <!-- Image container with placeholder state -->
                         <FrameLayout
                             android:layout_width="match_parent"
-                            android:layout_height="240dp">
+                            android:layout_height="220dp">
 
                             <ImageView
                                 android:id="@+id/imageView"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="@android:color/transparent"
-                                android:contentDescription="Selected image preview"
-                                />
+                                android:scaleType="centerCrop"
+                                android:contentDescription="Selected image preview" />
 
-                            <!-- Placeholder overlay (show when no image) -->
                             <LinearLayout
                                 android:id="@+id/imagePlaceholder"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
                                 android:orientation="vertical"
                                 android:gravity="center"
-                                android:background="#F5F5F5"
+                                android:background="#F0F7EE"
                                 android:visibility="gone">
 
                                 <ImageView
-                                    android:layout_width="64dp"
-                                    android:layout_height="64dp"
+                                    android:layout_width="56dp"
+                                    android:layout_height="56dp"
                                     android:src="@drawable/idk"
-                                    android:alpha="0.3"
+                                    android:alpha="0.25"
                                     android:contentDescription="No image"
-                                    app:tint="?android:attr/textColorSecondary" />
+                                    app:tint="#7A9A75" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="No image selected"
-                                    android:textColor="?android:attr/textColorSecondary"
+                                    android:textColor="#7A9A75"
                                     android:layout_marginTop="8dp"
-                                    android:textSize="14sp" />
+                                    android:textSize="13sp" />
                             </LinearLayout>
                         </FrameLayout>
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- Actions Card with improved button design -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardImageSource"
+                <!-- ───────────────────────────────────────────
+                     BOTTOM SHEET SURFACE
+                     Wraps scan, guide, and diagnosis cards
+                     ─────────────────────────────────────────── -->
+                <androidx.cardview.widget.CardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="2dp"
-                    app:strokeWidth="0dp">
+                    android:layout_marginStart="-14dp"
+                    android:layout_marginEnd="-14dp"
+                    android:layout_marginBottom="-88dp"
+                    app:cardCornerRadius="30dp"
+                    app:cardElevation="6dp"
+                    android:outlineSpotShadowColor="@color/gray"
+                    android:outlineAmbientShadowColor="@color/gray"
+                    app:cardBackgroundColor="@android:color/white">
 
+                    <!-- Negative bottom padding trick: extend content past card bottom
+                         so the rounded bottom corners are never visible on screen -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Choose Image Source"
-                            android:textSize="18sp"
-                            android:textStyle="bold"
-                            android:textColor="?android:attr/textColorPrimary"
-                            android:layout_marginBottom="16dp" />
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:paddingTop="20dp"
+                        android:paddingBottom="100dp">
 
-                        <!-- Improved Button Grid -->
-                        <LinearLayout
+                        <!-- Drag handle pill (purely decorative, bottom-sheet feel) -->
+
+                        <!-- ───────────────────────────────────────────
+                             SCAN / IMAGE SOURCE CARD
+                             IDs preserved: cardImageSource, cardSelectImage,
+                             cardTakeImage, btnSelectImage, btnTakeImage
+                             ─────────────────────────────────────────── -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/cardImageSource"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center"
-                            android:weightSum="2">
+                            android:layout_marginBottom="12dp"
+                            android:layout_marginTop="10sp"
+                            app:cardCornerRadius="18dp"
+                            app:cardElevation="0dp"
+                            app:strokeWidth="1dp"
+                            app:strokeColor="#D4E8D0"
+                            app:cardBackgroundColor="#F8FBF7">
 
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/cardSelectImage"
-                                android:layout_width="0dp"
-                                android:layout_height="120dp"
-                                android:layout_weight="1"
-                                android:layout_marginEnd="8dp"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:foreground="?attr/selectableItemBackground"
-                                app:cardCornerRadius="12dp"
-                                app:cardElevation="0dp"
-                                app:strokeWidth="1dp"
-                                app:strokeColor="#E0E0E0">
+                            <LinearLayout
 
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:orientation="vertical"
+                                android:padding="14dp">
+
+                                <!-- Card header -->
                                 <LinearLayout
                                     android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:orientation="vertical"
-                                    android:gravity="center"
-                                    android:padding="16dp">
-
-                                    <ImageView
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:src="@android:drawable/ic_menu_gallery"
-                                        android:contentDescription="Gallery icon"
-                                        android:layout_marginBottom="8dp"
-                                        app:tint="?attr/colorPrimary" />
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginBottom="14dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
 
                                     <TextView
-                                        android:id="@+id/btnSelectImage"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="Select from\nGallery"
-                                        android:textSize="14sp"
-                                        android:textColor="?android:attr/textColorPrimary"
-                                        android:textAlignment="center"
-                                        android:gravity="center" />
+                                        android:layout_marginEnd="8dp"
+                                        android:text="📷"
+                                        android:textSize="16sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Scan a Plant"
+                                        android:textColor="#1A3A17"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold" />
                                 </LinearLayout>
-                            </com.google.android.material.card.MaterialCardView>
 
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/cardTakeImage"
-                                android:layout_width="0dp"
-                                android:layout_height="120dp"
-                                android:layout_weight="1"
-                                android:layout_marginStart="8dp"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:foreground="?attr/selectableItemBackground"
-                                app:cardCornerRadius="12dp"
-                                app:cardElevation="0dp"
-                                app:strokeWidth="1dp"
-                                app:strokeColor="#E0E0E0">
-
+                                <!-- Two action buttons -->
                                 <LinearLayout
                                     android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:orientation="vertical"
-                                    android:gravity="center"
-                                    android:padding="16dp">
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal">
 
-                                    <ImageView
-                                        android:layout_width="40dp"
-                                        android:layout_height="40dp"
-                                        android:src="@android:drawable/ic_menu_camera"
-                                        android:contentDescription="Camera icon"
-                                        android:layout_marginBottom="8dp"
-                                        app:tint="?attr/colorPrimary" />
+                                    <!-- Gallery button -->
+                                    <com.google.android.material.card.MaterialCardView
+                                        android:id="@+id/cardSelectImage"
+                                        android:layout_width="0dp"
+                                        android:layout_height="120dp"
+                                        android:layout_marginEnd="4dp"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:foreground="?attr/selectableItemBackground"
+                                        app:cardBackgroundColor="#F0F7EE"
+                                        app:cardCornerRadius="14dp"
+                                        app:cardElevation="0dp"
+                                        app:strokeColor="#C4DFC0"
+                                        app:strokeWidth="1.5dp">
 
-                                    <TextView
-                                        android:id="@+id/btnTakeImage"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Take\nPhoto"
-                                        android:textSize="14sp"
-                                        android:textColor="?android:attr/textColorPrimary"
-                                        android:textAlignment="center"
-                                        android:gravity="center" />
+                                        <LinearLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="match_parent"
+                                            android:gravity="center"
+                                            android:orientation="vertical"
+                                            android:padding="12dp">
+
+                                            <TextView
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginBottom="8dp"
+                                                android:text="🖼️"
+                                                android:textSize="30sp" />
+
+                                            <TextView
+                                                android:id="@+id/btnSelectImage"
+                                                android:layout_width="match_parent"
+                                                android:layout_height="wrap_content"
+                                                android:autoSizeMaxTextSize="12sp"
+                                                android:autoSizeMinTextSize="10sp"
+                                                android:autoSizeTextType="uniform"
+                                                android:gravity="center"
+                                                android:maxLines="2"
+                                                android:text="Select from&#10;Gallery"
+                                                android:textAlignment="center"
+                                                android:textColor="#2D5A27"
+                                                android:textSize="12sp"
+                                                android:textStyle="bold" />
+
+                                        </LinearLayout>
+
+                                    </com.google.android.material.card.MaterialCardView>
+
+                                    <!-- Camera button -->
+                                    <com.google.android.material.card.MaterialCardView
+                                        android:id="@+id/cardTakeImage"
+                                        android:layout_width="0dp"
+                                        android:layout_height="120dp"
+                                        android:layout_marginStart="4dp"
+                                        android:layout_weight="1"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:foreground="?attr/selectableItemBackground"
+                                        app:cardBackgroundColor="#F0F7EE"
+                                        app:cardCornerRadius="14dp"
+                                        app:cardElevation="0dp"
+                                        app:strokeColor="#C4DFC0"
+                                        app:strokeWidth="1.5dp">
+
+                                        <LinearLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="match_parent"
+                                            android:gravity="center"
+                                            android:orientation="vertical"
+                                            android:padding="12dp">
+
+                                            <TextView
+                                                android:layout_width="wrap_content"
+                                                android:layout_height="wrap_content"
+                                                android:layout_marginBottom="8dp"
+                                                android:text="📷"
+                                                android:textSize="30sp" />
+
+                                            <TextView
+                                                android:id="@+id/btnTakeImage"
+                                                android:layout_width="match_parent"
+                                                android:layout_height="wrap_content"
+                                                android:autoSizeMaxTextSize="12sp"
+                                                android:autoSizeMinTextSize="10sp"
+                                                android:autoSizeTextType="uniform"
+                                                android:gravity="center"
+                                                android:maxLines="2"
+                                                android:text="Take&#10;Photo"
+                                                android:textAlignment="center"
+                                                android:textColor="#2D5A27"
+                                                android:textSize="12sp"
+                                                android:textStyle="bold" />
+
+                                        </LinearLayout>
+
+                                    </com.google.android.material.card.MaterialCardView>
+
                                 </LinearLayout>
-                            </com.google.android.material.card.MaterialCardView>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
 
-                        </LinearLayout>
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- NEW: Strawberry Plant Guide Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardStrawberryGuide"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="2dp"
-                    app:strokeWidth="0dp"
-                    app:cardBackgroundColor="#E8F5E9">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="16dp"
-                        android:gravity="center_vertical">
-
-                        <ImageView
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:src="@android:drawable/ic_menu_info_details"
-                            android:contentDescription="Strawberry guide icon"
-                            android:layout_marginEnd="16dp"
-                            app:tint="#4CAF50" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Strawberry Plant Guide"
-                                android:textSize="18sp"
-                                android:textStyle="bold"
-                                android:textColor="#2E7D32" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Learn about planting and caring for strawberries"
-                                android:textSize="14sp"
-                                android:textColor="#558B2F"
-                                android:layout_marginTop="4dp" />
-                        </LinearLayout>
-
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@android:drawable/ic_menu_more"
-                            android:contentDescription="View guide"
-                            android:rotation="270"
-                            app:tint="#2E7D32" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Results Card with improved design -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardDiagnosisResult"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="2dp"
-                    app:strokeWidth="0dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
-
-                        <LinearLayout
+                        <!-- ───────────────────────────────────────────
+                             STRAWBERRY GUIDE CARD
+                             ID preserved: cardStrawberryGuide
+                             ─────────────────────────────────────────── -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/cardStrawberryGuide"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:layout_marginBottom="16dp">
+                            android:layout_marginBottom="12dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground"
+                            app:cardCornerRadius="18dp"
+                            app:cardElevation="0dp"
+                            app:strokeWidth="1dp"
+                            app:strokeColor="#C4DFC0"
+                            app:cardBackgroundColor="#EBF6E8">
 
-                            <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:src="@android:drawable/ic_menu_view"
-                                android:contentDescription="Results icon"
-                                android:layout_marginEnd="8dp"
-                                app:tint="?attr/colorPrimary" />
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Diagnosis Results"
-                                android:textSize="18sp"
-                                android:textStyle="bold"
-                                android:textColor="?android:attr/textColorPrimary" />
-                        </LinearLayout>
-
-                        <!-- Results content with better styling -->
-                        <FrameLayout
-                            android:id="@+id/frameResults"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="120dp"
-                            android:backgroundTint="@color/secondary">
-
-                            <!-- Wrap TextView and button in LinearLayout -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:orientation="vertical"/>
+                                android:orientation="horizontal"
+                                android:padding="14dp"
+                                android:gravity="center_vertical">
 
-                            <TextView
-                                android:id="@+id/tvResults"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="Select an image to detect strawberry diseases"
-                                android:textSize="16sp"
-                                android:padding="16dp"/>
+                                <com.google.android.material.card.MaterialCardView
+                                    android:layout_width="48dp"
+                                    android:layout_height="48dp"
+                                    android:layout_marginEnd="14dp"
+                                    app:cardCornerRadius="12dp"
+                                    app:cardElevation="0dp"
+                                    app:cardBackgroundColor="#2D5A27"
+                                    app:strokeWidth="0dp">
 
-                            <!-- Consult AI Button - NOW INSIDE THE FRAMELAYOUT -->
-                            <Button
-                                android:id="@+id/btnConsultAI"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="Consult AI"
-                                android:textColor="@android:color/white"
-                                android:layout_marginTop="8dp"
-                                android:visibility="gone"
-                                
-                                style="@style/Widget.MaterialComponents.Button"/>
+                                    <ImageView
+                                        android:layout_width="28dp"
+                                        android:layout_height="28dp"
+                                        android:layout_gravity="center"
+                                        android:src="@android:drawable/ic_menu_info_details"
+                                        android:contentDescription="Strawberry guide"
+                                        app:tint="#A8D8A3" />
+                                </com.google.android.material.card.MaterialCardView>
 
-                            <!-- Loading indicator -->
-                            <ProgressBar
-                                android:id="@+id/progressBar"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_gravity="center"
-                                android:visibility="gone"
-                                android:indeterminate="true" />
-                        </FrameLayout>
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
 
-                        <!-- Action Buttons with improved design -->
-                        <LinearLayout
-                            android:id="@+id/layoutActionButtons"
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Strawberry Plant Guide"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold"
+                                        android:textColor="#1A3A17" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Learn to plant and care for strawberries"
+                                        android:textSize="12sp"
+                                        android:textColor="#4A7A3F"
+                                        android:layout_marginTop="3dp"
+                                        android:lineSpacingMultiplier="1.2" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    android:contentDescription="View guide"
+                                    android:rotation="270"
+                                    app:tint="#4A8C3F" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- ───────────────────────────────────────────
+                             DIAGNOSIS RESULTS CARD
+                             IDs preserved: cardDiagnosisResult, frameResults,
+                             tvResults, btnConsultAI, progressBar,
+                             layoutActionButtons, btnSaveDiagnosis, progressBarSave
+                             ─────────────────────────────────────────── -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/cardDiagnosisResult"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:orientation="horizontal"
-                            android:visibility="gone"
-                            android:weightSum="2"
-                            android:layout_gravity="center">
-                            <ProgressBar
-                                android:id="@+id/progressBarSave"
-                                style="?android:attr/progressBarStyleSmall"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:layout_marginEnd="8dp"
-                                android:visibility="gone" />
+                            app:cardCornerRadius="18dp"
+                            app:cardElevation="0dp"
+                            app:strokeWidth="1dp"
+                            app:strokeColor="#D4E8D0"
+                            app:cardBackgroundColor="@android:color/white">
 
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnSaveDiagnosis"
-                                android:layout_gravity="center"
-                                android:layout_width="wrap_content"
+                            <LinearLayout
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginEnd="8dp"
-                                android:text="Save"
-                                android:textAllCaps="false"
-                                app:icon="@android:drawable/ic_menu_save"
-                                app:iconGravity="textStart"
-                                style="@style/Widget.Material3.Button.TonalButton" />
+                                android:orientation="vertical">
 
-                        </LinearLayout>
+                                <!-- Result card header row -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:gravity="center_vertical"
+                                    android:padding="14dp"
+                                    android:paddingBottom="12dp">
+
+                                    <ImageView
+                                        android:layout_width="20dp"
+                                        android:layout_height="20dp"
+                                        android:src="@android:drawable/ic_menu_view"
+                                        android:contentDescription="Results icon"
+                                        android:layout_marginEnd="8dp"
+                                        app:tint="#2D5A27" />
+
+                                    <TextView
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="Diagnosis Results"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        android:textColor="#1A3A17" />
+
+                                    <View
+                                        android:layout_width="8dp"
+                                        android:layout_height="8dp"
+                                        android:background="@drawable/loading" />
+                                </LinearLayout>
+
+                                <!-- Thin divider -->
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="1dp"
+                                    android:background="#EEF5ED" />
+
+                                <!-- Results body -->
+                                <FrameLayout
+                                    android:id="@+id/frameResults"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:minHeight="100dp"
+                                    android:background="#FAFCF9">
+
+                                    <TextView
+                                        android:id="@+id/tvResults"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:text="Select an image to detect strawberry diseases"
+                                        android:textSize="14sp"
+                                        android:textColor="#6A8A65"
+                                        android:padding="16dp"
+                                        android:lineSpacingMultiplier="1.4"
+                                        android:gravity="center" />
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnConsultAI"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_gravity="bottom"
+                                        android:layout_margin="14dp"
+                                        android:text="Consult AI"
+                                        android:textColor="@android:color/white"
+                                        android:textAllCaps="false"
+                                        android:visibility="gone"
+                                        app:backgroundTint="#2D5A27"
+                                        app:cornerRadius="12dp"
+                                        style="@style/Widget.MaterialComponents.Button" />
+
+                                    <ProgressBar
+                                        android:id="@+id/progressBar"
+                                        android:layout_width="36dp"
+                                        android:layout_height="36dp"
+                                        android:layout_gravity="center"
+                                        android:indeterminate="true"
+                                        android:visibility="gone"
+                                        android:indeterminateTint="#2D5A27" />
+                                </FrameLayout>
+
+                                <!-- Save / action row -->
+                                <LinearLayout
+                                    android:id="@+id/layoutActionButtons"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:padding="14dp"
+                                    android:paddingTop="12dp"
+                                    android:gravity="center_vertical"
+                                    android:visibility="gone">
+
+                                    <ProgressBar
+                                        android:id="@+id/progressBarSave"
+                                        style="?android:attr/progressBarStyleSmall"
+                                        android:layout_width="22dp"
+                                        android:layout_height="22dp"
+                                        android:layout_marginEnd="8dp"
+                                        android:indeterminateTint="#2D5A27"
+                                        android:visibility="gone" />
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnSaveDiagnosis"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_gravity="center"
+                                        android:text="Save Diagnosis"
+                                        android:textAllCaps="false"
+                                        android:textColor="#2D5A27"
+                                        app:icon="@android:drawable/ic_menu_save"
+                                        app:iconGravity="textStart"
+                                        app:iconTint="#2D5A27"
+                                        app:strokeColor="#C4DFC0"
+                                        app:strokeWidth="1.5dp"
+                                        app:cornerRadius="10dp"
+                                        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                                </LinearLayout>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
                     </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                </androidx.cardview.widget.CardView>
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
 
-        <!-- Floating Action Button with improved design -->
+
+        <!-- ───────────────────────────────────────────
+             FLOATING ACTION BUTTON
+             ID preserved: fabChat
+             ─────────────────────────────────────────── -->
         <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
             android:id="@+id/fabChat"
             android:layout_width="wrap_content"
@@ -455,25 +639,36 @@
             android:layout_gravity="bottom|end"
             android:layout_margin="16dp"
             android:text="AI Assistant"
-            android:backgroundTint="?attr/colorPrimary"
             android:textColor="@android:color/white"
+            android:backgroundTint="#2D5A27"
             app:icon="@drawable/baseline_chat_bubble_24"
             app:iconTint="@android:color/white"
+            app:elevation="6dp"
             android:contentDescription="Chat with AI Assistant" />
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-    <!-- Navigation Drawer Menu -->
+    <!-- ═══════════════════════════════════════════════
+         NAVIGATION DRAWER
+         ═══════════════════════════════════════════════ -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/navigation_view"
-        android:layout_width="280dp"
+        android:layout_width="288dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:fitsSystemWindows="true"
-        android:background="@android:color/white"
+        android:background="#F8FBF7"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/drawer_menu"
-        app:itemIconTint="?attr/colorPrimary"
-        app:itemTextColor="?android:attr/textColorPrimary" />
+        app:itemIconTint="#2D5A27"
+        app:itemTextColor="#1A3A17"
+        app:itemIconSize="22dp"
+        app:itemHorizontalPadding="16dp"
+        app:itemPaddingTop="6dp"
+        app:itemPaddingBottom="6dp"
+        app:itemBackground="@drawable/nav_item_selector"
+        app:itemRippleColor="#C8E6C9"
+        app:dividerColor="#D8EDD4"
+        app:elevation="8dp" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

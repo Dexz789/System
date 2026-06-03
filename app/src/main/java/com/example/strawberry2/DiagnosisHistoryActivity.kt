@@ -96,6 +96,7 @@ class DiagnosisHistoryActivity : AppCompatActivity() {
         toggle = ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.open, R.string.close)
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
+        toggle.drawerArrowDrawable.color = Color.WHITE
 
 
         // Set up RecyclerView with delete callback

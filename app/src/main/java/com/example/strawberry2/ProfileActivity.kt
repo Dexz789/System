@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
 import android.widget.Button
@@ -79,6 +80,7 @@ class ProfileActivity : AppCompatActivity() {
         )
         drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
+        toggle.drawerArrowDrawable.color = Color.WHITE
 
         // Setup navigation header
         setupNavigationHeader()

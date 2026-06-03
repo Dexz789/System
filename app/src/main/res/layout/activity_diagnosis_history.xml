@@ -16,10 +16,10 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:elevation="4dp"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
+            android:background="#2D5A27"
+            android:elevation="0dp"
+            app:navigationIconTint="@android:color/white"
+            app:titleTextColor="@android:color/white" />
 
         <!-- Selection Toolbar (hidden by default) -->
         <LinearLayout

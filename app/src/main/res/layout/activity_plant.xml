@@ -22,9 +22,11 @@
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
-                android:background="?attr/colorPrimary"
+                android:background="#2D5A27"
+                android:elevation="0dp"
+                app:navigationIconTint="@android:color/white"
                 app:title="Strawberry Planting Guide"
-                app:titleTextColor="@android:color/white"/>
+                app:titleTextColor="@android:color/white" />
 
         </com.google.android.material.appbar.AppBarLayout>
 
@@ -242,14 +244,23 @@
     <!-- Navigation Drawer Menu -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/navigation_view"
-        android:layout_width="280dp"
+        android:layout_width="288dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:fitsSystemWindows="true"
-        android:background="@android:color/white"
+        android:background="#F8FBF7"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/drawer_menu"
-        app:itemIconTint="?attr/colorPrimary"
-        app:itemTextColor="?android:attr/textColorPrimary" />
+        app:itemIconTint="#2D5A27"
+        app:itemTextColor="#1A3A17"
+        app:itemTextAppearance="@style/TextAppearance.AppCompat.Body1"
+        app:itemIconSize="22dp"
+        app:itemShapeFillColor="#EBF6E8"
+        app:itemShapeAppearance="@style/ShapeAppearance.Material3.Corner.ExtraLarge"
+        app:itemHorizontalPadding="12dp"
+        app:itemPaddingTop="4dp"
+        app:itemPaddingBottom="4dp"
+        app:dividerColor="#E0EDD9"
+        app:elevation="8dp" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
