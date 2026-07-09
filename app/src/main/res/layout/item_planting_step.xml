@@ -78,6 +78,35 @@
             android:textColor="#555555"
             android:lineSpacingExtra="4dp"/>
 
+        <!-- YouTube Video Thumbnail -->
+        <FrameLayout
+            android:id="@+id/containerVideo"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivVideoThumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:background="#1A1A1A" />
+
+            <View
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_play_button" />
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_play" />
+
+        </FrameLayout>
+
     </LinearLayout>
 
 </com.google.android.material.card.MaterialCardView>

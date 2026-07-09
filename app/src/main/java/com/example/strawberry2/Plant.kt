@@ -4,6 +4,7 @@ package com.example.strawberry2
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.drawable.ColorDrawable
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -64,73 +65,85 @@ class Plant : AppCompatActivity() {
             stepNumber = 1,
             title = "Choose the Right Variety",
             description = "Select strawberry varieties suited to your climate. June-bearing varieties produce one large crop, while everbearing varieties produce throughout the season.",
-            icon = "🍓"
+            icon = "🍓",
+            videoId = "l9klMOlofew"
         ),
         PlantingStep(
             stepNumber = 2,
             title = "Select the Perfect Location",
             description = "Choose a spot with full sun (6-8 hours daily) and good air circulation. Ensure the soil drains well to prevent root rot.",
-            icon = "☀️"
+            icon = "☀️",
+            videoId = "v45c5o1SF7A"
         ),
         PlantingStep(
             stepNumber = 3,
             title = "Prepare the Soil",
             description = "Test soil pH (ideal: 5.5-6.5). Mix in 2-3 inches of compost or aged manure. Add organic fertilizer rich in phosphorus for root development.",
-            icon = "🌱"
+            icon = "🌱",
+            videoId = "LhJfrN76K2s"
         ),
         PlantingStep(
             stepNumber = 4,
             title = "Timing is Key",
             description = "Plant in early spring (after last frost) or fall. In tropical climates, plant during the cooler months for best results.",
-            icon = "📅"
+            icon = "📅",
+            videoId = "wvH7wjMjuNo"
         ),
         PlantingStep(
             stepNumber = 5,
             title = "Proper Spacing",
             description = "Space plants 12-18 inches apart in rows 3-4 feet apart. This allows proper air circulation and room for runners.",
-            icon = "📏"
+            icon = "📏",
+            videoId = "G_bpjmFJ4Q4"
         ),
         PlantingStep(
             stepNumber = 6,
             title = "Plant at the Right Depth",
             description = "Plant so the crown (where leaves meet roots) is at soil level. Roots should spread out and down. Don't bury the crown or leave roots exposed.",
-            icon = "🌿"
+            icon = "🌿",
+            videoId = "fMtLqqoD14s"
         ),
         PlantingStep(
             stepNumber = 7,
             title = "Water Immediately",
             description = "Water thoroughly after planting. Keep soil consistently moist (not waterlogged) during the first few weeks to establish roots.",
-            icon = "💧"
+            icon = "💧",
+            videoId = "cGt4rnkEoEE"
         ),
         PlantingStep(
             stepNumber = 8,
             title = "Apply Mulch",
             description = "Add 2-3 inches of straw or pine needle mulch around plants. This conserves moisture, suppresses weeds, and keeps fruit clean.",
-            icon = "🍂"
+            icon = "🍂",
+            videoId = "-49m8bZRIWc"
         ),
         PlantingStep(
             stepNumber = 9,
             title = "Remove First Flowers",
             description = "For the first 4-6 weeks, pinch off flowers to encourage root and leaf growth instead of fruit production.",
-            icon = "🌸"
+            icon = "🌸",
+            videoId = "r6H7H2vau1c"
         ),
         PlantingStep(
             stepNumber = 10,
             title = "Fertilize Regularly",
             description = "Apply balanced fertilizer (10-10-10) monthly during growing season. Switch to low-nitrogen fertilizer when flowering begins.",
-            icon = "🥄"
+            icon = "🥄",
+            videoId = "cMRfcpSIKis"
         ),
         PlantingStep(
             stepNumber = 11,
             title = "Manage Runners",
             description = "Trim excess runners to keep plants productive. Leave 2-3 daughter plants per mother plant for renewal, remove others.",
-            icon = "✂️"
+            icon = "✂️",
+            videoId = "zVAO1r7Tn0I"
         ),
         PlantingStep(
             stepNumber = 12,
             title = "Harvest Time! 🎉",
             description = "June-bearing varieties: Harvest 4-6 weeks after flowering (typically late spring/early summer).\n\nEverbearing varieties: First harvest in 8-10 weeks, then continuously.\n\nFrom planting to first harvest: 4-6 months depending on variety and conditions.\n\nPick berries when fully red, every 2-3 days during peak season.",
-            icon = "🧺"
+            icon = "🧺",
+            videoId = "XnXjvIn7P2k"
         )
     )
 
@@ -552,7 +565,8 @@ data class PlantingStep(
     val stepNumber: Int,
     val title: String,
     val description: String,
-    val icon: String
+    val icon: String,
+    val videoId: String
 )
 
 // Adapter for planting steps
@@ -565,6 +579,8 @@ class PlantingStepsAdapter(
         val tvStepIcon: TextView = view.findViewById(R.id.tvStepIcon)
         val tvStepTitle: TextView = view.findViewById(R.id.tvStepTitle)
         val tvStepDescription: TextView = view.findViewById(R.id.tvStepDescription)
+        val containerVideo: android.widget.FrameLayout = view.findViewById(R.id.containerVideo)
+        val ivVideoThumbnail: ImageView = view.findViewById(R.id.ivVideoThumbnail)
     }
 
     override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): StepViewHolder {
@@ -579,7 +595,47 @@ class PlantingStepsAdapter(
         holder.tvStepIcon.text = step.icon
         holder.tvStepTitle.text = step.title
         holder.tvStepDescription.text = step.description
+        setupVideoThumbnail(holder, step.videoId)
     }
 
     override fun getItemCount() = steps.size
+
+    private fun setupVideoThumbnail(holder: StepViewHolder, videoId: String) {
+        if (videoId.isEmpty()) {
+            holder.containerVideo.visibility = android.view.View.GONE
+            return
+        }
+        holder.containerVideo.visibility = android.view.View.VISIBLE
+        val thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
+        com.bumptech.glide.Glide.with(holder.itemView.context)
+            .load(thumbnailUrl)
+            .centerCrop()
+            .into(holder.ivVideoThumbnail)
+        holder.containerVideo.setOnClickListener {
+            val context = holder.itemView.context
+            val activity = context as? AppCompatActivity ?: return@setOnClickListener
+            val playerView = com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(context)
+            playerView.enableAutomaticInitialization = false
+
+            val dialog = android.app.Dialog(context)
+            dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+            dialog.setContentView(playerView)
+            dialog.window?.setLayout(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            dialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
+
+            activity.lifecycle.addObserver(playerView)
+            playerView.initialize(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
+                override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
+                    youTubePlayer.loadVideo(videoId, 0f)
+                }
+            })
+            dialog.setOnDismissListener {
+                activity.lifecycle.removeObserver(playerView)
+            }
+            dialog.show()
+        }
+    }
 }

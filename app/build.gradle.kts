@@ -109,4 +109,7 @@ dependencies {
     implementation("com.sun.mail:android-activation:1.6.7")
 
     implementation("io.noties.markwon:core:4.6.2")
+
+    // YouTube player
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:13.0.0")
 }
