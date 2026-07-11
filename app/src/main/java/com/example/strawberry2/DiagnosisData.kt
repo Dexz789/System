@@ -7,27 +7,27 @@ data class DiagnosisData(
     val userId: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val detections: List<DetectionResult> = emptyList(),
-    val imageUrl: String? = null, // Optional: if you want to save images to Firebase Storage
+    val imageUrl: String? = null,
     val totalIssuesFound: Int = 0,
-    val aiInsights: String? = null
+    val aiInsights: String? = null,
+    val embedding: List<Double>? = null
 
 ) : Serializable {
-    // Convert to Map for Firestore
     fun toMap(): Map<String, Any> {
-        return hashMapOf(
+        val map = hashMapOf<String, Any>(
             "id" to id,
             "userId" to userId,
             "timestamp" to timestamp,
             "detections" to detections.map { it.toMap() },
             "imageUrl" to (imageUrl ?: ""),
             "totalIssuesFound" to totalIssuesFound,
-            "aiInsights" to aiInsights
-
-        ) as Map<String, Any>
+            "aiInsights" to (aiInsights ?: "")
+        )
+        embedding?.let { map["embedding"] = it }
+        return map as Map<String, Any>
     }
 
     companion object {
-        // Convert from Firestore document
         fun fromMap(map: Map<String, Any>): DiagnosisData {
             return DiagnosisData(
                 id = map["id"] as? String ?: "",
@@ -38,7 +38,8 @@ data class DiagnosisData(
                 } ?: emptyList(),
                 imageUrl = map["imageUrl"] as? String,
                 totalIssuesFound = (map["totalIssuesFound"] as? Long)?.toInt() ?: 0,
-                aiInsights = map["aiInsights"] as? String
+                aiInsights = map["aiInsights"] as? String,
+                embedding = (map["embedding"] as? List<Double>)
             )
         }
     }

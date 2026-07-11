@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.text.method.LinkMovementMethod
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -83,6 +84,7 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
 
         // Cache references for use in the chat callback
         tvAiInsightsRef   = tvAiInsights
+        tvAiInsights.movementMethod = LinkMovementMethod.getInstance()
         btnContinueChatRef = btnContinueChat
         markwon = Markwon.create(requireContext())
 

@@ -15,15 +15,20 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.strawberry2.AppConfig
+import com.example.strawberry2.DiagnosisRepository
 import com.example.strawberry2.R
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.generationConfig
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 
 import android.widget.FrameLayout
-import com.google.ai.client.generativeai.type.content
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -48,8 +53,9 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
 
     private var initialMessage: String? = null
     private var diagnosisImage: Bitmap? = null
-    private var diagnosisContext: String? = null  // ← injected context from saved diagnosis
+    private var diagnosisContext: String? = null
     private var onAiResponseSaved: ((String) -> Unit)? = null
+    private var lastMessageTime = 0L
 
     /**
      * Called when the user closes the chat if there are any meaningful messages in the
@@ -58,63 +64,51 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
      */
     private var onConversationEnded: ((String) -> Unit)? = null
 
-    private val generativeModel by lazy {
-        GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
-            apiKey = GEMINI_API_KEY,
-            generationConfig = generationConfig {
-                temperature = 0.7f
-                topK = 40
-                topP = 0.95f
-                maxOutputTokens = 500
-            }
-        )
-    }
-
     companion object {
-        private const val GEMINI_API_KEY = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0"
+        private const val RATE_LIMIT_MS = 2000L
+        private val okHttpClient = OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
         private const val ARG_INITIAL_MESSAGE = "initial_message"
         private const val ARG_DIAGNOSIS_CONTEXT = "diagnosis_context"
 
-        private const val SYSTEM_PROMPT = """You are an expert agricultural AI assistant specializing in strawberry plants and their diseases. 
+        private const val SYSTEM_PROMPT = """Ikaw ay isang expert agricultural AI assistant na marunong sa strawberry plants at diseases.
 
-IMPORTANT: Always format your responses using bullet points for easy reading.
-Your role is to:
-1. Identify strawberry diseases based on symptoms described
-2. Provide information about common strawberry diseases
-3. Recommend treatment options and prevention strategies
-4. Give advice on strawberry plant care and disease management
+Sumagot sa simple at madaling maintindihan na Taglish (Tagalog-English mix). Para ito sa beginners na wala pang alam sa pagtatanim ng strawberry.
 
-Always be:
-- Helpful and informative
-- Clear and concise (use bullet points)
-- Practical with actionable advice
-- Encouraging and supportive
+Gamitin ang bullet points (•) para sa lists at numbered lists (1. 2. 3.) para sa steps.
 
-Keep responses brief (2-3 sections maximum) and use bullet points for all key information.
+Role mo:
+1. Identify strawberry diseases base sa symptoms
+2. Magbigay ng treatment options at prevention tips
+3. Mag-advise sa strawberry plant care
 
-If asked about topics outside of strawberries and plant diseases, politely redirect the conversation back to your area of expertise. Use 150 words only. Make it concise
-IMPORTANT FORMATTING RULES:
-- Use bold bullet points (•) for main sections
-- Use numbered lists (1., 2., 3.) for sub-points under each section
-- Do NOT use nested bullet points (* or - inside another bullet)
-- Keep formatting clean and consistent
+Sa bawat sagot, laging isama ang:
+- Immediate Treatment — specific product name, application rate, gaano kadalas (e.g., every 7-14 days)
+- Prevention — specific cultural practices, spacing, watering techniques, mulch type/thickness
+
+Keep responses brief (2-3 sections max) at use 150 words only.
+
+REFERENCES: Sa dulo ng sagot, magbigay ng 2-3 reference links galing sa Philippine websites (gaya ng da.gov.ph, bpi.da.gov.ph, ati.da.gov.ph, pcaarrd.dost.gov.ph, o iba pang .ph domains) Format: "- [Title](https://...)".
+STRICT GUARDRAIL: Strawberry LANG ang sagutin. Kapag ibang tanong, sumagot ng: "Strawberry lang po ang alam ko. Magtanong po kayo about strawberry!" Huwag sumagot sa hindi strawberry.
 
 Example format:
 
-• What it means:
-1. This disease appears as white powder
-2. It spreads in humid conditions
+• Anong problema:
+1. May puting powder sa dahon ng strawberry
+2. Lumalala kapag mahalumigmig ang paligid
 
-• Treatment:
-1. Remove affected leaves
-2. Apply fungicide
+• Gamot agad:
+1. Putulin at itapon ang mga infected na dahon
+2. Mag-spray ng sulfur fungicide (20g sa 16L tubig) tuwing 7-10 araw
+3. Mag-spray sa umaga o hapon para hindi masunog ang dahon
 
-• Prevention:
-1. Improve air circulation
-2. Avoid overwatering
-
-
+• Paano iwasan:
+1. Magtanong ng 30-45cm ang pagitan para may hangin
+2. Diligan sa lupa lang, umaga — iwasan basain ang dahon
+3. Mag-spray ng neem oil (5ml sa 1L tubig) kada linggo
+4. Gumamit ng plastic mulch para hindi tumalsik ang lupa sa dahon
 """
 
         fun newInstance(
@@ -294,6 +288,13 @@ Example format:
     }
 
     private fun processDiagnosisWithImage(message: String, image: Bitmap?) {
+        val now = System.currentTimeMillis()
+        if (now - lastMessageTime < RATE_LIMIT_MS) {
+            Toast.makeText(context, "Please wait before sending another message", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lastMessageTime = now
+
         val userMessage = ChatMessage(
             message = message,
             isUser = true,
@@ -306,18 +307,82 @@ Example format:
 
         lifecycleScope.launch {
             try {
-                val response = if (image != null) {
-                    val inputContent = content {
-                        image(image)
-                        text("$SYSTEM_PROMPT\n\nUser: $message")
+                val messagesArray = JSONArray()
+
+                // System message
+                messagesArray.put(JSONObject(mapOf("role" to "system", "content" to SYSTEM_PROMPT)))
+
+                try {
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                    val ragContext = DiagnosisRepository.buildRagContext(uid, message)
+                    if (ragContext != null) {
+                        messagesArray.put(JSONObject(mapOf("role" to "system", "content" to "Relevant past diagnoses for reference:\n\n$ragContext")))
                     }
-                    generativeModel.generateContent(inputContent)
+                } catch (_: Exception) { }
+
+                // User message (with optional image)
+                val userContent: Any = if (image != null) {
+                    val base64 = bitmapToBase64(image)
+                    JSONArray().apply {
+                        put(JSONObject(mapOf("type" to "text", "text" to message)))
+                        put(JSONObject(mapOf(
+                            "type" to "image_url",
+                            "image_url" to JSONObject(mapOf("url" to "data:image/jpeg;base64,$base64"))
+                        )))
+                    }
                 } else {
-                    generativeModel.generateContent("$SYSTEM_PROMPT\n\nUser: $message")
+                    message
+                }
+                messagesArray.put(JSONObject(mapOf("role" to "user", "content" to userContent)))
+
+                val requestBody = JSONObject().apply {
+                    put("model", AppConfig.OPENROUTER_MODEL)
+                    put("messages", messagesArray)
+                    put("max_tokens", 500)
+                    put("temperature", 0.7)
+                    put("top_p", 0.95)
                 }
 
-                val aiResponseText = response.text?.trim()
-                    ?: "I apologize, but I couldn't generate a response. Please try again."
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = requestBody.toString().toRequestBody(mediaType)
+
+                val request = Request.Builder()
+                    .url("https://openrouter.ai/api/v1/chat/completions")
+                    .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                    .post(body)
+                    .build()
+
+                val response = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    okHttpClient.newCall(request).execute()
+                }
+
+                val responseBody = response.body?.string()
+                val aiResponseText = if (response.isSuccessful && responseBody != null) {
+                    try {
+                        val jsonResponse = JSONObject(responseBody)
+                        jsonResponse.optJSONObject("error")?.let {
+                            val msg = it.optString("message", "Unknown error")
+                            Log.e("ChatDialog", "OpenRouter returned error in 200: $msg")
+                            "⚠️ AI Error: $msg"
+                        } ?: jsonResponse.getJSONArray("choices")
+                            .optJSONObject(0)
+                            ?.getJSONObject("message")
+                            ?.getString("content")
+                            ?.trim()
+                            ?.ifEmpty { null }
+                    } catch (e: Exception) {
+                        Log.e("ChatDialog", "Failed to parse OpenRouter response: $responseBody", e)
+                        null
+                    }
+                } else {
+                    val errorDetail = try {
+                        JSONObject(responseBody ?: "").optJSONObject("error")?.optString("message") ?: ""
+                    } catch (_: Exception) { "" }
+                    Log.e("ChatDialog", "OpenRouter error ${response.code}: $responseBody")
+                    "⚠️ AI Error (${response.code}): ${errorDetail.ifEmpty { response.message }}"
+                } ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
@@ -348,6 +413,13 @@ Example format:
     }
 
     private fun sendMessage() {
+        val now = System.currentTimeMillis()
+        if (now - lastMessageTime < RATE_LIMIT_MS) {
+            Toast.makeText(context, "Please wait before sending another message", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lastMessageTime = now
+
         val messageText = etMessage.text.toString().trim()
 
         if (messageText.isEmpty()) {
@@ -368,41 +440,92 @@ Example format:
     private fun getAIResponse(userMessage: String) {
         lifecycleScope.launch {
             try {
-                val conversationHistory = buildString {
-                    append(SYSTEM_PROMPT)
-                    append("\n\n")
+                val messagesArray = JSONArray()
 
-                    // ── Inject saved diagnosis context when coming from history ──
-                    if (!diagnosisContext.isNullOrEmpty()) {
-                        append("IMPORTANT CONTEXT — The user is asking follow-up questions about a previously saved diagnosis. ")
-                        append("Use the details below as the reference for this entire conversation:\n\n")
-                        append(diagnosisContext)
-                        append("\n\n")
+                // System prompt
+                messagesArray.put(JSONObject(mapOf("role" to "system", "content" to SYSTEM_PROMPT)))
+
+                try {
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                    val ragContext = DiagnosisRepository.buildRagContext(uid, userMessage)
+                    if (ragContext != null) {
+                        messagesArray.put(JSONObject(mapOf("role" to "system", "content" to "Relevant past diagnoses for reference:\n\n$ragContext")))
                     }
+                } catch (_: Exception) { }
 
-                    // Include last 4 messages for conversational context (avoid token limits)
-                    val recentMessages = messages
-                        .filter {
-                            !it.message.contains("Hello! 🍓") &&
-                                    !it.message.contains("I've loaded your saved") &&
-                                    !it.message.contains("What it means:", ignoreCase = true)
-                        }
-                        .takeLast(4)
-
-                    recentMessages.forEach { msg ->
-                        if (msg.isUser) {
-                            append("User: ${msg.message}\n\n")
-                        } else if (msg.canBeSaved || !msg.message.contains("Sorry, I encountered")) {
-                            append("Assistant: ${msg.message}\n\n")
-                        }
-                    }
-
-                    append("User: $userMessage\n\nAssistant:")
+                // ── Inject saved diagnosis context when coming from history ──
+                if (!diagnosisContext.isNullOrEmpty()) {
+                    messagesArray.put(JSONObject(mapOf(
+                        "role" to "system",
+                        "content" to "IMPORTANT CONTEXT — The user is asking follow-up questions about a previously saved diagnosis. Use the details below as the reference for this entire conversation:\n\n$diagnosisContext"
+                    )))
                 }
 
-                val response = generativeModel.generateContent(conversationHistory)
-                val aiResponseText = response.text?.trim()
-                    ?: "I apologize, but I couldn't generate a response. Please try again."
+                // Include last 4 messages for conversational context (avoid token limits)
+                val recentMessages = messages
+                    .filter {
+                        !it.message.contains("Hello! 🍓") &&
+                                !it.message.contains("I've loaded your saved") &&
+                                !it.message.contains("What it means:", ignoreCase = true)
+                    }
+                    .takeLast(4)
+
+                recentMessages.forEach { msg ->
+                    val role = if (msg.isUser) "user" else "assistant"
+                    messagesArray.put(JSONObject(mapOf("role" to role, "content" to msg.message)))
+                }
+
+                // Current user message
+                messagesArray.put(JSONObject(mapOf("role" to "user", "content" to userMessage)))
+
+                val requestBody = JSONObject().apply {
+                    put("model", AppConfig.OPENROUTER_MODEL)
+                    put("messages", messagesArray)
+                    put("max_tokens", 500)
+                    put("temperature", 0.7)
+                    put("top_p", 0.95)
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = requestBody.toString().toRequestBody(mediaType)
+
+                val request = Request.Builder()
+                    .url("https://openrouter.ai/api/v1/chat/completions")
+                    .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                    .post(body)
+                    .build()
+
+                val response = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    okHttpClient.newCall(request).execute()
+                }
+
+                val responseBody = response.body?.string()
+                val aiResponseText = if (response.isSuccessful && responseBody != null) {
+                    try {
+                        val jsonResponse = JSONObject(responseBody)
+                        jsonResponse.optJSONObject("error")?.let {
+                            val msg = it.optString("message", "Unknown error")
+                            Log.e("ChatDialog", "OpenRouter returned error in 200: $msg")
+                            "⚠️ AI Error: $msg"
+                        } ?: jsonResponse.getJSONArray("choices")
+                            .optJSONObject(0)
+                            ?.getJSONObject("message")
+                            ?.getString("content")
+                            ?.trim()
+                            ?.ifEmpty { null }
+                    } catch (e: Exception) {
+                        Log.e("ChatDialog", "Failed to parse OpenRouter response: $responseBody", e)
+                        null
+                    }
+                } else {
+                    val errorDetail = try {
+                        JSONObject(responseBody ?: "").optJSONObject("error")?.optString("message") ?: ""
+                    } catch (_: Exception) { "" }
+                    Log.e("ChatDialog", "OpenRouter error ${response.code}: $responseBody")
+                    "⚠️ AI Error (${response.code}): ${errorDetail.ifEmpty { response.message }}"
+                } ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val canBeSaved = (diagnosisImage != null) ||
                         (initialMessage?.contains("diagnosis", ignoreCase = true) == true)
@@ -434,14 +557,21 @@ Example format:
     }
 
     private fun buildErrorMessage(e: Exception): String = when {
-        e.message?.contains("API_KEY_INVALID") == true ->
+        e.message?.contains("401") == true || e.message?.contains("Unauthorized") == true ->
             "⚠️ API Key is invalid. Please update your API key."
-        e.message?.contains("quota") == true ->
-            "⚠️ API quota exceeded. Please try again later."
-        e.message?.contains("network") == true ->
+        e.message?.contains("402") == true || e.message?.contains("Insufficient credits") == true ->
+            "⚠️ Insufficient credits. Please check your OpenRouter account."
+        e.message?.contains("timeout") == true || e.message?.contains("network") == true ->
             "⚠️ Network error. Please check your connection."
         else ->
             "⚠️ Error: ${e.message ?: "Unknown error occurred"}"
+    }
+
+    private fun bitmapToBase64(bitmap: Bitmap): String {
+        val stream = java.io.ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+        val bytes = stream.toByteArray()
+        return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }
 
     private fun saveAiResponse(aiResponse: String) {

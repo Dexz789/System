@@ -21,8 +21,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.strawberry2.Chat.ChatAdapter
 import com.example.strawberry2.Chat.ChatMessage
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.generationConfig
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.card.MaterialCardView
@@ -35,6 +33,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URL
 import kotlin.math.abs
 
@@ -52,6 +56,7 @@ class Plant : AppCompatActivity() {
     private lateinit var stepsAdapter: PlantingStepsAdapter
     private lateinit var chatAdapter: ChatAdapter
     private val chatMessages = mutableListOf<ChatMessage>()
+    private var lastMessageTime = 0L
     private lateinit var auth: FirebaseAuth
 
     private lateinit var navHeaderView: View
@@ -147,53 +152,44 @@ class Plant : AppCompatActivity() {
         )
     )
 
-    private val generativeModel by lazy {
-        GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
-            apiKey = GEMINI_API_KEY,
-            generationConfig = generationConfig {
-                temperature = 0.7f
-                topK = 40
-                topP = 0.95f
-                maxOutputTokens = 600
-            }
-        )
-    }
-
     companion object {
-        private const val GEMINI_API_KEY = "AIzaSyAP733BlqJCjVfeAuP0MjA5Y0qRH1cB8b0"
+        private const val RATE_LIMIT_MS = 2000L
+        private val openRouterClient = OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
 
-        private const val SYSTEM_PROMPT = """You are an expert agricultural AI assistant specializing in strawberry cultivation and planting.
+        private const val SYSTEM_PROMPT = """Ikaw ay isang expert agricultural AI assistant sa strawberry planting at cultivation.
 
-IMPORTANT: Always format your responses using bullet points for easy reading.
+Sumagot sa simple at madaling maintindihan na Taglish (Tagalog-English mix). Para ito sa mga beginners na wala pang alam sa pagtatanim ng strawberry.
 
-Your role is to:
-1. Answer questions about strawberry planting, growing, and care
-2. Provide detailed information about the 12-step planting guide
-3. Offer troubleshooting advice for common problems
-4. Share tips for maximizing strawberry yields
-5. Explain harvest timing and techniques
-6. Provide climate-specific advice
+Gamitin ang bullet points (•) para sa lists at numbered lists (1. 2. 3.) para sa steps.
 
-The user has access to a 12-step strawberry planting guide covering:
+Role mo:
+1. Sumagot sa tanong tungkol sa strawberry planting, growing, at care
+2. Magbigay ng detailed info tungkol sa pagtatanim ng strawberry
+3. Mag-troubleshoot ng common problems
+4. Mag-share ng tips para dumami ang ani
+5. Mag-explain kung kailan aanihin
+
+May access ang user sa 12-step strawberry planting guide:
 - Variety selection
-- Location and soil preparation
-- Planting timing and techniques
-- Spacing and depth
-- Watering and mulching
-- Flower removal and fertilization
+- Location at soil preparation
+- Planting timing at techniques
+- Spacing at depth
+- Watering at mulching
+- Flower removal at fertilization
 - Runner management
 - Harvest timeline (4-6 months from planting)
 
-Always be:
-- Helpful and informative
-- Clear and concise (use bullet points)
-- Practical with actionable advice
-- Encouraging and supportive
+Sa bawat sagot, laging isama ang specific details:
+- Treatment — specific product name, paano ihalo, gaano kadalas
+- Prevention — spacing, watering techniques, anong mulch gamitin
 
-Keep responses brief (3-4 sections maximum with bullet points) and focused on strawberry cultivation.
+Keep responses brief (3-4 sections max) at use 200 words maximum.
 
-If asked about topics outside of strawberry planting and cultivation, politely redirect the conversation back to your area of expertise. Use 200 words maximum. Make it concise and easy to understand."""
+REFERENCES: Sa dulo ng sagot, magbigay ng 2-3 reference links galing sa Philippine websites (gaya ng da.gov.ph, bpi.da.gov.ph, ati.da.gov.ph, pcaarrd.dost.gov.ph, o iba pang .ph domains). Format: "- [Title](https://...)".
+STRICT GUARDRAIL: Strawberry LANG ang sagutin — planting, cultivation, care, diseases, pests, harvesting, at farming. Kapag ibang tanong, sumagot ng: "Strawberry lang po ang alam ko. Magtanong po kayo about strawberry!" Huwag sumagot sa hindi strawberry."""
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -422,6 +418,13 @@ If asked about topics outside of strawberry planting and cultivation, politely r
     }
 
     private fun sendMessage() {
+        val now = System.currentTimeMillis()
+        if (now - lastMessageTime < RATE_LIMIT_MS) {
+            Toast.makeText(this, "Please wait before sending another message", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lastMessageTime = now
+
         val messageText = etChatMessage.text.toString().trim()
 
         if (messageText.isEmpty()) {
@@ -444,30 +447,89 @@ If asked about topics outside of strawberry planting and cultivation, politely r
     private fun getAIResponse(userMessage: String) {
         lifecycleScope.launch {
             try {
-                // Build conversation history
-                val conversationHistory = buildString {
-                    append(SYSTEM_PROMPT)
-                    append("\n\n")
+                val messages = mutableListOf<Map<String, String>>()
 
-                    // Include recent messages for context
-                    val recentMessages = chatMessages
-                        .filter { !it.message.contains("Hello! 🍓") }
-                        .takeLast(10)
+                // System message
+                messages.add(mapOf("role" to "system", "content" to SYSTEM_PROMPT))
 
-                    recentMessages.forEach { msg ->
-                        if (msg.isUser) {
-                            append("User: ${msg.message}\n\n")
-                        } else if (msg.canBeSaved == false || !msg.message.contains("Sorry, I encountered")) {
-                            append("Assistant: ${msg.message}\n\n")
-                        }
+                // RAG: retrieve relevant past diagnoses
+                try {
+                    val uid = auth.currentUser?.uid
+                    val ragContext = DiagnosisRepository.buildRagContext(uid, userMessage)
+                    if (ragContext != null) {
+                        messages.add(mapOf(
+                            "role" to "system",
+                            "content" to "Relevant past diagnoses for reference:\n\n$ragContext"
+                        ))
                     }
+                } catch (_: Exception) { }
 
-                    append("User: $userMessage\n\nAssistant:")
+                // Recent conversation history
+                val recentMessages = chatMessages
+                    .filter { !it.message.contains("Hello! 🍓") }
+                    .takeLast(10)
+
+                recentMessages.forEach { msg ->
+                    val role = if (msg.isUser) "user" else "assistant"
+                    messages.add(mapOf("role" to role, "content" to msg.message))
                 }
 
-                val response = generativeModel.generateContent(conversationHistory)
-                val aiResponseText = response.text?.trim()
-                    ?: "I apologize, but I couldn't generate a response. Please try again."
+                // Current user message
+                messages.add(mapOf("role" to "user", "content" to userMessage))
+
+                val jsonMessages = JSONArray()
+                messages.forEach { msg ->
+                    jsonMessages.put(JSONObject(msg))
+                }
+
+                val requestBody = JSONObject().apply {
+                    put("model", AppConfig.OPENROUTER_MODEL)
+                    put("messages", jsonMessages)
+                    put("max_tokens", 600)
+                    put("temperature", 0.7)
+                    put("top_p", 0.95)
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = requestBody.toString().toRequestBody(mediaType)
+
+                val request = Request.Builder()
+                    .url("https://openrouter.ai/api/v1/chat/completions")
+                    .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                    .post(body)
+                    .build()
+
+                val response = withContext(Dispatchers.IO) {
+                    openRouterClient.newCall(request).execute()
+                }
+
+                val responseBody = response.body?.string()
+                val aiResponseText = if (response.isSuccessful && responseBody != null) {
+                    try {
+                        val jsonResponse = JSONObject(responseBody)
+                        jsonResponse.optJSONObject("error")?.let {
+                            val msg = it.optString("message", "Unknown error")
+                            Log.e("PlantActivity", "OpenRouter returned error in 200: $msg")
+                            "⚠️ AI Error: $msg"
+                        } ?: jsonResponse.getJSONArray("choices")
+                            .optJSONObject(0)
+                            ?.getJSONObject("message")
+                            ?.getString("content")
+                            ?.trim()
+                            ?.ifEmpty { null }
+                    } catch (e: Exception) {
+                        Log.e("PlantActivity", "Failed to parse OpenRouter response: $responseBody", e)
+                        null
+                    }
+                } else {
+                    val errorDetail = try {
+                        JSONObject(responseBody ?: "").optJSONObject("error")?.optString("message") ?: ""
+                    } catch (_: Exception) { "" }
+                    Log.e("PlantActivity", "OpenRouter error ${response.code}: $responseBody")
+                    "⚠️ AI Error (${response.code}): ${errorDetail.ifEmpty { response.message }}"
+                } ?: "I apologize, but I couldn't generate a response. Please try again."
 
                 val aiMessage = ChatMessage(
                     message = aiResponseText,

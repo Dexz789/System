@@ -10,6 +10,9 @@ import android.util.Base64
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 class DiagnosisRepository {
@@ -69,17 +72,22 @@ class DiagnosisRepository {
                     println("DEBUG: No image bitmap provided")
                 }
 
-                // Create diagnosis with image URL
-                val diagnosisWithId = diagnosis.copy(
+                // Create diagnosis with image URL and embedding
+                var diagnosisWithEmbedding = diagnosis.copy(
                     id = diagnosisId,
                     imageUrl = imageUrl
                 )
 
-                println("DEBUG: Saving diagnosis with imageUrl: ${diagnosisWithId.imageUrl}")
-                println("DEBUG: Full diagnosis data: $diagnosisWithId")
+                try {
+                    val searchText = EmbeddingService.buildSearchText(diagnosisWithEmbedding)
+                    val embedding = EmbeddingService.generateEmbedding(searchText)
+                    if (embedding != null) {
+                        diagnosisWithEmbedding = diagnosisWithEmbedding.copy(embedding = embedding)
+                    }
+                } catch (_: Exception) { }
 
                 // Save to Firestore
-                docRef.set(diagnosisWithId.toMap()).await()
+                docRef.set(diagnosisWithEmbedding.toMap()).await()
                 println("DEBUG: Diagnosis saved to Firestore successfully")
 
                 Result.success(docRef.id)
@@ -196,7 +204,61 @@ class DiagnosisRepository {
         }
     }
 
-    // Get diagnosis count for a user
+    suspend fun searchSimilarDiagnoses(
+        userId: String,
+        queryEmbedding: List<Double>,
+        maxResults: Int = 3,
+        minSimilarity: Double = 0.3
+    ): List<DiagnosisData> {
+        return try {
+            val snapshot = diagnosesCollection
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+
+            val scored = snapshot.documents.mapNotNull { doc ->
+                try {
+                    val data = DiagnosisData.fromMap(doc.data as Map<String, Any>)
+                    val emb = data.embedding
+                    if (emb != null && emb.isNotEmpty()) {
+                        val similarity = EmbeddingService.cosineSimilarity(queryEmbedding, emb)
+                        if (similarity >= minSimilarity) {
+                            SimilarDiagnosis(data, similarity)
+                        } else null
+                    } else null
+                } catch (_: Exception) { null }
+            }.sortedByDescending { it.similarity }.take(maxResults)
+
+            scored.map { it.diagnosis }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    companion object {
+        suspend fun buildRagContext(userId: String?, query: String): String? {
+            if (userId == null) return null
+            return try {
+                val embedding = EmbeddingService.generateEmbedding(query) ?: return null
+                val similar = DiagnosisRepository().searchSimilarDiagnoses(userId, embedding)
+                if (similar.isEmpty()) return null
+                similar.joinToString("\n\n---\n\n") { diag ->
+                    val detections = diag.detections.joinToString(", ") {
+                        "${it.label} (${(it.confidence * 100).toInt()}%)"
+                    }
+                    buildString {
+                        appendLine("Date: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(diag.timestamp))}")
+                        appendLine("Detections: $detections")
+                        diag.aiInsights?.let { appendLine("Analysis: ${it.take(500)}") }
+                    }
+                }
+            } catch (_: Exception) { null }
+        }
+    }
+
+    private data class SimilarDiagnosis(
+        val diagnosis: DiagnosisData,
+        val similarity: Double
+    )
+
     suspend fun getDiagnosisCount(userId: String): Result<Int> {
         return try {
             val snapshot = diagnosesCollection

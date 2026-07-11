@@ -47,7 +47,7 @@ class ObjectDetector(context: Context) {
         }
     }
 
-    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.5f): List<Detection> {
+    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.7f): List<Detection> {
         val detections = mutableListOf<Detection>()
 
         try {

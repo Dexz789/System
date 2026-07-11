@@ -1,6 +1,10 @@
 package com.example.strawberry2.Chat
 
+import android.text.Spannable
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -11,12 +15,37 @@ import com.example.strawberry2.R
 
 class ChatAdapter(
     private val messages: MutableList<ChatMessage>,
-    private val onSaveClick: (String) -> Unit  // Callback for save action
+    private val onSaveClick: (String) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    private lateinit var markwon: io.noties.markwon.Markwon
 
     companion object {
         private const val VIEW_TYPE_USER = 1
         private const val VIEW_TYPE_AI = 2
+
+        private val linkTouchListener = View.OnTouchListener { v, event ->
+            val widget = v as TextView
+            val text = widget.text
+            if (text is Spannable) {
+                val action = event.action
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_DOWN) {
+                    val x = (event.x - widget.totalPaddingLeft + widget.scrollX).toInt()
+                    val y = (event.y - widget.totalPaddingTop + widget.scrollY).toInt()
+                    val layout = widget.layout ?: return@OnTouchListener false
+                    val line = layout.getLineForVertical(y)
+                    val offset = layout.getOffsetForHorizontal(line, x.toFloat())
+                    val links = text.getSpans(offset, offset, ClickableSpan::class.java)
+                    if (links.isNotEmpty()) {
+                        if (action == MotionEvent.ACTION_UP) {
+                            links[0].onClick(widget)
+                        }
+                        return@OnTouchListener true
+                    }
+                }
+            }
+            false
+        }
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -24,14 +53,20 @@ class ChatAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        if (!::markwon.isInitialized) {
+            val ctx = parent.context.applicationContext
+            markwon = io.noties.markwon.Markwon.builder(ctx)
+                .usePlugin(io.noties.markwon.ext.tables.TablePlugin.create(ctx))
+                .build()
+        }
         return if (viewType == VIEW_TYPE_USER) {
             val view = LayoutInflater.from(parent.context)
                 .inflate(R.layout.item_message_user, parent, false)
-            UserMessageViewHolder(view)
+            UserMessageViewHolder(view, markwon)
         } else {
             val view = LayoutInflater.from(parent.context)
                 .inflate(R.layout.item_message_ai, parent, false)
-            AiMessageViewHolder(view, onSaveClick)
+            AiMessageViewHolder(view, markwon, onSaveClick)
         }
     }
 
@@ -50,13 +85,17 @@ class ChatAdapter(
         notifyItemInserted(messages.size - 1)
     }
 
-    class UserMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    class UserMessageViewHolder(
+        itemView: View,
+        private val markwon: io.noties.markwon.Markwon
+    ) : RecyclerView.ViewHolder(itemView) {
         private val tvMessage: TextView = itemView.findViewById(R.id.tvMessage)
         private val ivMessageImage: ImageView? = itemView.findViewById(R.id.ivMessageImage)
 
         fun bind(message: ChatMessage) {
-            val markwon = io.noties.markwon.Markwon.create(itemView.context)
             markwon.setMarkdown(tvMessage, message.message)
+            tvMessage.movementMethod = LinkMovementMethod.getInstance()
+            tvMessage.setOnTouchListener(linkTouchListener)
 
             if (message.image != null && ivMessageImage != null) {
                 ivMessageImage.visibility = View.VISIBLE
@@ -69,6 +108,7 @@ class ChatAdapter(
 
     class AiMessageViewHolder(
         itemView: View,
+        private val markwon: io.noties.markwon.Markwon,
         private val onSaveClick: (String) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val tvMessage: TextView = itemView.findViewById(R.id.tvMessage)
@@ -76,8 +116,9 @@ class ChatAdapter(
         private val ivDiagnosisImageChat: ImageView? = itemView.findViewById(R.id.ivDiagnosisImageChat)
 
         fun bind(message: ChatMessage) {
-            val markwon = io.noties.markwon.Markwon.create(itemView.context)
             markwon.setMarkdown(tvMessage, message.message)
+            tvMessage.movementMethod = LinkMovementMethod.getInstance()
+            tvMessage.setOnTouchListener(linkTouchListener)
 
             // Show the strawberry image (e.g. in the greeting when launched from history)
             if (message.image != null && ivDiagnosisImageChat != null) {

@@ -43,7 +43,8 @@
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:lineSpacingExtra="2dp" />
+            android:lineSpacingExtra="2dp"
+            android:textColorLink="#B3D4FF" />
 
     </LinearLayout>
 
