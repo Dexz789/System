@@ -4,6 +4,23 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+val envFile = rootProject.file("../.env.local").takeIf { it.exists() }
+    ?: rootProject.file(".env.local").takeIf { it.exists() }
+    ?: file("../.env.local").takeIf { it.exists() }
+    ?: file(".env.local")
+val envProps = mutableMapOf<String, String>()
+if (envFile.exists()) {
+    envFile.readLines().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
+            val eq = trimmed.indexOf('=')
+            if (eq > 0) {
+                envProps[trimmed.substring(0, eq).trim()] = trimmed.substring(eq + 1).trim()
+            }
+        }
+    }
+}
+
 android {
     namespace = "com.example.strawberry2"
     compileSdk = 36
@@ -16,6 +33,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "OPEN_ROUTER_API_KEY", "\"${envProps["OPEN_ROUTER_API_KEY"] ?: ""}\"")
     }
 
     buildFeatures {
