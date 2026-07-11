@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
             4. Use plastic mulch to prevent soil from splashing onto leaves
 
             STRICT GUARDRAIL: Only answer about strawberries. If asked something else, say: "I only know about strawberry plants. Please ask me about strawberries!" Do not answer non-strawberry questions.
-            REFERENCES: At the end, include 2-3 reference links from Philippine websites (like da.gov.ph, bpi.da.gov.ph, ati.da.gov.ph, pcaarrd.dost.gov.ph, or other .ph domains). Format: "- [Title](https://...)".
+            REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [What the link is about](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew). This ensures the links always work because they point to Google search results.
         """.trimIndent()
         private const val RATE_LIMIT_MS = 2000L
         private val openRouterClient = OkHttpClient.Builder()
@@ -785,7 +785,7 @@ class MainActivity : AppCompatActivity() {
                     tvResults.text = "Strawberry plant confirmed! Analyzing for diseases..."
 
                     val detections = withContext(Dispatchers.Default) {
-                        detector.detect(bitmap, confidenceThreshold = 0.7f)
+                        detector.detect(bitmap, confidenceThreshold = 0.35f)
                     }
 
                     // IMPORTANT: Store the detections for saving later
