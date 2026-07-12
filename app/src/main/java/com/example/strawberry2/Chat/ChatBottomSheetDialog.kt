@@ -90,7 +90,7 @@ In every answer, always include:
 
 Provide detailed and well-explained responses. Do not artificially limit or make the explanation too brief.
 
-REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [What the link is about](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew). This ensures the links always work because they point to Google search results.
+REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [Descriptive Link Title](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew) and "Descriptive Link Title" with a short, meaningful description of the search (e.g., "Google Search: Strawberry Powdery Mildew Care"). Do not write the literal text "Descriptive Link Title" or "What the link is about" inside the brackets.
 STRICT GUARDRAIL: Only answer about strawberries. If asked something else, say: "I only know about strawberry plants. Please ask me about strawberries!" Do not answer non-strawberry questions.
 
 Example format:
@@ -338,7 +338,7 @@ Example format:
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", messagesArray)
-                    put("max_tokens", 1000)
+                    put("max_tokens", 1500)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }
@@ -481,7 +481,7 @@ Example format:
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", messagesArray)
-                    put("max_tokens", 1000)
+                    put("max_tokens", 1500)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }
@@ -568,9 +568,26 @@ Example format:
     }
 
     private fun bitmapToBase64(bitmap: Bitmap): String {
+        val maxDimension = 1024
+        val width = bitmap.width
+        val height = bitmap.height
+        val scaledBitmap = if (width > maxDimension || height > maxDimension) {
+            val ratio = width.toFloat() / height.toFloat()
+            val newWidth = if (width > height) maxDimension else (maxDimension * ratio).toInt()
+            val newHeight = if (height > width) maxDimension else (maxDimension / ratio).toInt()
+            Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        } else {
+            bitmap
+        }
+
         val stream = java.io.ByteArrayOutputStream()
-        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+        scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
         val bytes = stream.toByteArray()
+
+        if (scaledBitmap != bitmap) {
+            scaledBitmap.recycle()
+        }
+
         return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }
 

@@ -188,7 +188,7 @@ In every answer, always include specific details:
 
 Provide detailed and well-explained responses. Do not artificially limit or make the explanation too brief.
 
-REFERENCES: At the end, include 2-3 search links for further reading about the specific topic. Use this format for each link: "- [What the link is about](https://www.google.com/search?q=strawberry+{topic}+Philippines)". Replace {topic} with the actual topic (e.g., planting+guide). This ensures the links always work because they point to Google search results.
+REFERENCES: At the end, include 2-3 search links for further reading about the specific topic. Use this format for each link: "- [Descriptive Link Title](https://www.google.com/search?q=strawberry+{topic}+Philippines)". Replace {topic} with the actual topic (e.g., planting+guide) and "Descriptive Link Title" with a short, meaningful description of the search (e.g., "Google Search: Strawberry Variety Selection"). Do not write the literal text "Descriptive Link Title" or "What the link is about" inside the brackets.
 STRICT GUARDRAIL: Only answer about strawberries — planting, cultivation, care, diseases, pests, harvesting, and farming. If asked something else, say: "I only know about strawberry plants. Please ask me about strawberries!" Do not answer non-strawberry questions."""
     }
 
@@ -485,7 +485,7 @@ STRICT GUARDRAIL: Only answer about strawberries — planting, cultivation, care
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", jsonMessages)
-                    put("max_tokens", 1200)
+                    put("max_tokens", 1500)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }
