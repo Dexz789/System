@@ -803,8 +803,88 @@ class MainActivity : AppCompatActivity() {
                     // STEP 2: It IS a strawberry plant - proceed with disease detection
                     tvResults.text = "Strawberry plant confirmed! Analyzing for diseases..."
 
-                    val detections = withContext(Dispatchers.Default) {
+                    val rawDetections = withContext(Dispatchers.Default) {
                         detector.detect(bitmap, confidenceThreshold = 0.20f)
+                    }
+
+                    // STEP 3: AI visual verification gate.
+                    // YOLO can false-positive on healthy shiny fruit. We send the image to the
+                    // vision AI and ask it to confirm which detected diseases are actually visible.
+                    // Only AI-confirmed detections are shown to the user.
+                    val detections = if (rawDetections.isNotEmpty()) {
+                        tvResults.text = "Verifying detections with AI..."
+                        try {
+                            val detectedLabels = rawDetections.map { it.label }.distinct()
+                            val verificationPrompt = """You are a strawberry plant disease expert.
+
+Look at this strawberry image carefully. The disease detection model flagged these possible issues: ${detectedLabels.joinToString(", ")}.
+
+For EACH flagged disease, reply ONLY with:
+CONFIRMED: <disease_name>
+or
+REJECTED: <disease_name>
+
+Rules:
+- CONFIRMED only if you can clearly see actual disease symptoms in the image.
+- REJECTED if the plant looks healthy or if the symptom is just normal fruit texture (e.g. shiny skin, normal achene seeds).
+- Do NOT add any explanation. Only output CONFIRMED/REJECTED lines."""
+
+                            val base64 = bitmapToBase64(bitmap)
+                            val userContent = org.json.JSONArray().apply {
+                                put(org.json.JSONObject(mapOf("type" to "text", "text" to verificationPrompt)))
+                                put(org.json.JSONObject(mapOf(
+                                    "type" to "image_url",
+                                    "image_url" to org.json.JSONObject(mapOf("url" to "data:image/jpeg;base64,$base64"))
+                                )))
+                            }
+                            val verifyMessages = org.json.JSONArray().apply {
+                                put(org.json.JSONObject(mapOf("role" to "user", "content" to userContent)))
+                            }
+                            val verifyBody = org.json.JSONObject().apply {
+                                put("model", AppConfig.OPENROUTER_MODEL)
+                                put("messages", verifyMessages)
+                                put("max_tokens", 200)
+                                put("temperature", 0.0)
+                            }
+                            val mediaType = "application/json; charset=utf-8".toMediaType()
+                            val verifyRequest = Request.Builder()
+                                .url("https://openrouter.ai/api/v1/chat/completions")
+                                .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                                .addHeader("Content-Type", "application/json")
+                                .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                                .post(verifyBody.toString().toRequestBody(mediaType))
+                                .build()
+
+                            val verifyResponse = withContext(Dispatchers.IO) {
+                                openRouterClient.newCall(verifyRequest).execute()
+                            }
+                            val verifyText = verifyResponse.body?.string()
+                                ?.let { org.json.JSONObject(it) }
+                                ?.optJSONArray("choices")
+                                ?.optJSONObject(0)
+                                ?.optJSONObject("message")
+                                ?.optString("content") ?: ""
+
+                            Log.d("MainActivity", "AI verification response: $verifyText")
+
+                            // Parse which diseases the AI confirmed
+                            val confirmedLabels = verifyText.lines()
+                                .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
+                                .map { it.substringAfter(":").trim().lowercase() }
+                                .toSet()
+
+                            val verified = rawDetections.filter { det ->
+                                confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                            }
+                            Log.d("MainActivity", "YOLO: ${rawDetections.size} detections, AI confirmed: ${verified.size} (${confirmedLabels})")
+                            verified
+                        } catch (e: Exception) {
+                            // If AI verification fails (network, quota, etc.), fall back to raw detections
+                            Log.w("MainActivity", "AI verification failed, using raw YOLO detections: ${e.message}")
+                            rawDetections
+                        }
+                    } else {
+                        rawDetections
                     }
 
                     // IMPORTANT: Store the detections for saving later
@@ -823,8 +903,6 @@ class MainActivity : AppCompatActivity() {
 
                         btnSelectImage.isEnabled = true
                         updateSaveButtonState()
-                        // Show Consult AI even for healthy plants (user might want advice)
-                        // Automatically trigger AI consultation after result is shown
                         if (isTutorialActive && ::tutorialManager.isInitialized) {
                             val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
                             card.post {
@@ -872,6 +950,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     consultAI()
+
 
                 }.onFailure { exception ->
                     // PlantNet API failed (network error, quota, etc.)

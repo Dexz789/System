@@ -157,10 +157,10 @@ class ObjectDetector(context: Context) {
             // Apply Non-Maximum Suppression (NMS) to remove duplicate detections
             val nmsDetections = applyNMS(detections, iouThreshold = 0.30f)
 
-            // Cap at max 2 detections per class to prevent spam on repetitive images
+            // Cap at max 1 detection per class to prevent spam
             val filteredDetections = nmsDetections
                 .groupBy { it.label }
-                .flatMap { (_, group) -> group.take(2) }
+                .flatMap { (_, group) -> group.take(1) }
                 .sortedByDescending { it.score }
 
             return filteredDetections
