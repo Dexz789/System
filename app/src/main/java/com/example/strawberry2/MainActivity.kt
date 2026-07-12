@@ -861,30 +861,34 @@ Rules:
                             val verifyResponse = withContext(Dispatchers.IO) {
                                 openRouterClient.newCall(verifyRequest).execute()
                             }
-                            val verifyText = verifyResponse.body?.string()
-                                ?.let { org.json.JSONObject(it) }
-                                ?.optJSONArray("choices")
-                                ?.optJSONObject(0)
-                                ?.optJSONObject("message")
-                                ?.optString("content") ?: ""
+                            val verified = verifyResponse.use { response ->
+                                if (!response.isSuccessful) {
+                                    throw IOException("OpenRouter error ${response.code}")
+                                }
+                                val responseBody = response.body?.string() ?: throw IOException("Empty verification response")
+                                val json = org.json.JSONObject(responseBody)
+                                val verifyText = json.optJSONArray("choices")
+                                    ?.optJSONObject(0)
+                                    ?.optJSONObject("message")
+                                    ?.optString("content") ?: throw IOException("Could not parse AI response choices")
 
-                            Log.d("MainActivity", "AI verification response: $verifyText")
+                                Log.d("MainActivity", "AI verification response: $verifyText")
 
-                            // Parse which diseases the AI confirmed
-                            val confirmedLabels = verifyText.lines()
-                                .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
-                                .map { it.substringAfter(":").trim().lowercase() }
-                                .toSet()
+                                // Parse which diseases the AI confirmed
+                                val confirmedLabels = verifyText.lines()
+                                    .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
+                                    .map { it.substringAfter(":").trim().lowercase() }
+                                    .toSet()
 
-                            val verified = rawDetections.filter { det ->
-                                confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                                rawDetections.filter { det ->
+                                    confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                                }
                             }
-                            Log.d("MainActivity", "YOLO: ${rawDetections.size} detections, AI confirmed: ${verified.size} (${confirmedLabels})")
+                            Log.d("MainActivity", "YOLO: ${rawDetections.size} detections, AI confirmed: ${verified.size}")
                             verified
                         } catch (e: Exception) {
-                            // If AI verification fails (network, quota, etc.), fall back to raw detections
-                            Log.w("MainActivity", "AI verification failed, using raw YOLO detections: ${e.message}")
-                            rawDetections
+                            Log.e("MainActivity", "AI verification failed: ${e.message}", e)
+                            throw IOException("Verification failed: ${e.message}. Please check your connection and try again.")
                         }
                     } else {
                         rawDetections
@@ -1038,26 +1042,34 @@ Rules:
                             val verifyResponse = withContext(Dispatchers.IO) {
                                 openRouterClient.newCall(verifyRequest).execute()
                             }
-                            val verifyText = verifyResponse.body?.string()
-                                ?.let { org.json.JSONObject(it) }
-                                ?.optJSONArray("choices")
-                                ?.optJSONObject(0)
-                                ?.optJSONObject("message")
-                                ?.optString("content") ?: ""
+                            val verified = verifyResponse.use { response ->
+                                if (!response.isSuccessful) {
+                                    throw IOException("OpenRouter error ${response.code}")
+                                }
+                                val responseBody = response.body?.string() ?: throw IOException("Empty verification response")
+                                val json = org.json.JSONObject(responseBody)
+                                val verifyText = json.optJSONArray("choices")
+                                    ?.optJSONObject(0)
+                                    ?.optJSONObject("message")
+                                    ?.optString("content") ?: throw IOException("Could not parse AI response choices")
 
-                            Log.d("MainActivity", "AI verification response: $verifyText")
+                                Log.d("MainActivity", "AI verification response: $verifyText")
 
-                            val confirmedLabels = verifyText.lines()
-                                .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
-                                .map { it.substringAfter(":").trim().lowercase() }
-                                .toSet()
+                                // Parse which diseases the AI confirmed
+                                val confirmedLabels = verifyText.lines()
+                                    .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
+                                    .map { it.substringAfter(":").trim().lowercase() }
+                                    .toSet()
 
-                            val verified = rawDetections.filter { det ->
-                                confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                                rawDetections.filter { det ->
+                                    confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                                }
                             }
+                            Log.d("MainActivity", "YOLO: ${rawDetections.size} detections, AI confirmed: ${verified.size}")
                             verified
                         } catch (e: Exception) {
-                            rawDetections
+                            Log.e("MainActivity", "AI verification failed: ${e.message}", e)
+                            throw IOException("Verification failed: ${e.message}. Please check your connection and try again.")
                         }
                     } else {
                         rawDetections
@@ -1121,8 +1133,19 @@ Rules:
                 }
 
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Error during detection: ${e.message}", Toast.LENGTH_LONG).show()
-                tvResults.text = "Error: ${e.message}"
+                val errorMessage = e.message ?: "An unexpected error occurred"
+                Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
+
+                if (errorMessage.contains("Verification failed") || errorMessage.contains("OpenRouter") || errorMessage.contains("connection")) {
+                    tvResults.text = buildString {
+                        append("⚠️ Verification Failed\n\n")
+                        append("Could not connect to the AI verification service.\n\n")
+                        append("Please check if your internet connection is stable or try again later.")
+                    }
+                } else {
+                    tvResults.text = "Error: $errorMessage"
+                }
+
                 btnSelectImage.isEnabled = true
                 currentDetections = null
                 updateSaveButtonState()
@@ -1880,8 +1903,11 @@ Rules:
                     .build()
 
                 val response = openRouterClient.newCall(request).execute()
-                val responseBody = response.body?.string()
-                if (response.isSuccessful && responseBody != null) {
+                response.use { resp ->
+                    if (!resp.isSuccessful) {
+                        throw IOException("OpenRouter error ${resp.code}")
+                    }
+                    val responseBody = resp.body?.string() ?: throw IOException("Empty response body")
                     val content = org.json.JSONObject(responseBody)
                         .getJSONArray("choices")
                         .getJSONObject(0)
@@ -1891,12 +1917,10 @@ Rules:
                     
                     Log.d("MainActivity", "verifyStrawberryWithAI response: $content")
                     content.equals("YES", ignoreCase = true)
-                } else {
-                    false
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error in verifyStrawberryWithAI", e)
-                false
+                throw IOException("Verification failed: Unable to verify plant species due to connection error.", e)
             }
         }
     }
