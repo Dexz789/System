@@ -768,18 +768,24 @@ class MainActivity : AppCompatActivity() {
                     println("DEBUG: Is strawberry: ${identification.isStrawberry}, Confidence: ${identification.confidence}")
 
                     // Check if it's a strawberry plant
-                    if (!identification.isStrawberry) {
-                        // NOT A STRAWBERRY PLANT (or no plant detected at all)
-                        tvResults.text = buildString {
-                            append("Not a strawberry plant\n\n")
+                    var isStrawberry = identification.isStrawberry
+                    if (!isStrawberry) {
+                        tvResults.text = "Verifying plant species with AI..."
+                        val aiConfirmed = verifyStrawberryWithAI(bitmap)
+                        if (aiConfirmed) {
+                            isStrawberry = true
+                        }
+                    }
 
-                            // If we detected something, show what it is
+                    if (!isStrawberry) {
+                        // NOT A STRAWBERRY PLANT — show warning and stop scanning
+                        tvResults.text = buildString {
+                            append("Not a Strawberry Plant\n\n")
                             if (identification.scientificName != null && identification.confidence > 0.1f) {
                                 append("Detected: ${identification.commonName ?: identification.scientificName}\n")
                                 append("Confidence: ${String.format("%.1f%%", identification.confidence * 100)}\n\n")
                                 append("Please take a picture of a strawberry plant for disease analysis.")
                             } else {
-                                // No plant detected or very low confidence
                                 append("Could not identify any plant in this image.\n\n")
                                 append("Please ensure:\n")
                                 append("• The image clearly shows a plant\n")
@@ -791,16 +797,13 @@ class MainActivity : AppCompatActivity() {
                         btnSelectImage.isEnabled = true
                         currentDetections = null
                         updateSaveButtonState()
-                        // Don't show Consult AI button for non-strawberry plants
                         btnConsultAI.visibility = View.GONE
-                        // Not a strawberry — prompt user to try again
                         if (isTutorialActive && ::tutorialManager.isInitialized) {
                             tutorialManager.onAnalysisRejected()
                         }
                         return@launch
                     }
 
-                    // STEP 2: It IS a strawberry plant - proceed with disease detection
                     tvResults.text = "Strawberry plant confirmed! Analyzing for diseases..."
 
                     val rawDetections = withContext(Dispatchers.Default) {
@@ -954,31 +957,128 @@ Rules:
 
                 }.onFailure { exception ->
                     // PlantNet API failed (network error, quota, etc.)
-                    // Fall through to disease detection rather than blocking the user
-                    println("WARNING: PlantNet API failed: ${exception.message} — skipping plant verification")
+                    // Try Vision AI as a fallback to verify if it's a strawberry plant/fruit
+                    println("WARNING: PlantNet API failed: ${exception.message} — trying Vision AI fallback")
                     exception.printStackTrace()
 
-                    Toast.makeText(
-                        this@MainActivity,
-                        "⚠ Plant verification unavailable — running disease scan anyway",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    tvResults.text = "Verifying plant species with AI..."
 
-                    tvResults.text = "Running disease scan..."
+                    val aiConfirmed = verifyStrawberryWithAI(bitmap)
+                    if (!aiConfirmed) {
+                        tvResults.text = buildString {
+                            append("Not a Strawberry Plant\n\n")
+                            append("Could not confirm this is a strawberry plant or fruit.\n\n")
+                            append("Please ensure:\n")
+                            append("• The image clearly shows a plant\n")
+                            append("• The plant is a strawberry\n")
+                            append("• The image has good lighting")
+                        }
 
-                    val detections = withContext(Dispatchers.Default) {
+                        btnSelectImage.isEnabled = true
+                        currentDetections = null
+                        updateSaveButtonState()
+                        btnConsultAI.visibility = View.GONE
+                        if (isTutorialActive && ::tutorialManager.isInitialized) {
+                            tutorialManager.onAnalysisRejected()
+                        }
+                        return@launch
+                    }
+
+                    tvResults.text = "Strawberry plant confirmed by AI! Analyzing for diseases..."
+
+                    val rawDetections = withContext(Dispatchers.Default) {
                         detector.detect(bitmap, confidenceThreshold = 0.20f)
+                    }
+
+                    // STEP 3: AI visual verification gate.
+                    val detections = if (rawDetections.isNotEmpty()) {
+                        tvResults.text = "Verifying detections with AI..."
+                        try {
+                            val detectedLabels = rawDetections.map { it.label }.distinct()
+                            val verificationPrompt = """You are a strawberry plant disease expert.
+
+Look at this strawberry image carefully. The disease detection model flagged these possible issues: ${detectedLabels.joinToString(", ")}.
+
+For EACH flagged disease, reply ONLY with:
+CONFIRMED: <disease_name>
+or
+REJECTED: <disease_name>
+
+Rules:
+- CONFIRMED only if you can clearly see actual disease symptoms in the image.
+- REJECTED if the plant looks healthy or if the symptom is just normal fruit texture (e.g. shiny skin, normal achene seeds).
+- Do NOT add any explanation. Only output CONFIRMED/REJECTED lines."""
+
+                            val base64 = bitmapToBase64(bitmap)
+                            val userContent = org.json.JSONArray().apply {
+                                put(org.json.JSONObject(mapOf("type" to "text", "text" to verificationPrompt)))
+                                put(org.json.JSONObject(mapOf(
+                                    "type" to "image_url",
+                                    "image_url" to org.json.JSONObject(mapOf("url" to "data:image/jpeg;base64,$base64"))
+                                )))
+                            }
+                            val verifyMessages = org.json.JSONArray().apply {
+                                put(org.json.JSONObject(mapOf("role" to "user", "content" to userContent)))
+                            }
+                            val verifyBody = org.json.JSONObject().apply {
+                                put("model", AppConfig.OPENROUTER_MODEL)
+                                put("messages", verifyMessages)
+                                put("max_tokens", 200)
+                                put("temperature", 0.0)
+                            }
+                            val mediaType = "application/json; charset=utf-8".toMediaType()
+                            val verifyRequest = Request.Builder()
+                                .url("https://openrouter.ai/api/v1/chat/completions")
+                                .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                                .addHeader("Content-Type", "application/json")
+                                .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                                .post(verifyBody.toString().toRequestBody(mediaType))
+                                .build()
+
+                            val verifyResponse = withContext(Dispatchers.IO) {
+                                openRouterClient.newCall(verifyRequest).execute()
+                            }
+                            val verifyText = verifyResponse.body?.string()
+                                ?.let { org.json.JSONObject(it) }
+                                ?.optJSONArray("choices")
+                                ?.optJSONObject(0)
+                                ?.optJSONObject("message")
+                                ?.optString("content") ?: ""
+
+                            Log.d("MainActivity", "AI verification response: $verifyText")
+
+                            val confirmedLabels = verifyText.lines()
+                                .filter { it.trim().startsWith("CONFIRMED:", ignoreCase = true) }
+                                .map { it.substringAfter(":").trim().lowercase() }
+                                .toSet()
+
+                            val verified = rawDetections.filter { det ->
+                                confirmedLabels.any { confirmed -> det.label.lowercase().contains(confirmed) || confirmed.contains(det.label.lowercase()) }
+                            }
+                            verified
+                        } catch (e: Exception) {
+                            rawDetections
+                        }
+                    } else {
+                        rawDetections
                     }
 
                     currentDetections = detections
 
                     if (detections.isEmpty()) {
-                        tvResults.text = "✓ No diseases detected.\n\n(Plant verification was unavailable)"
+                        tvResults.text = buildString {
+                            append("✓ Plant appears to be healthy\n\n")
+                            append("Species: Strawberry\n\n")
+                            append("No diseases detected in this image.")
+                        }
+
                         btnSelectImage.isEnabled = true
                         updateSaveButtonState()
                         if (isTutorialActive && ::tutorialManager.isInitialized) {
                             val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
-                            card.post { tutorialManager.onAnalysisComplete() }
+                            card.post {
+                                tutorialManager.onAnalysisComplete()
+                            }
                         }
                         consultAI()
                         return@launch
@@ -1013,7 +1113,9 @@ Rules:
 
                     if (isTutorialActive && ::tutorialManager.isInitialized) {
                         val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
-                        card.post { tutorialManager.onAnalysisComplete() }
+                        card.post {
+                            tutorialManager.onAnalysisComplete()
+                        }
                     }
                     consultAI()
                 }
@@ -1738,6 +1840,65 @@ Rules:
         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
         val bytes = stream.toByteArray()
         return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+    }
+
+    private suspend fun verifyStrawberryWithAI(bitmap: Bitmap): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val base64 = bitmapToBase64(bitmap)
+                val verificationPrompt = """
+                    Analyze this image. Does it contain a strawberry fruit, strawberry leaf, or strawberry plant? 
+                    Answer only with "YES" or "NO". Do not provide any other text.
+                """.trimIndent()
+
+                val userContent = org.json.JSONArray().apply {
+                    put(org.json.JSONObject(mapOf("type" to "text", "text" to verificationPrompt)))
+                    put(org.json.JSONObject(mapOf(
+                        "type" to "image_url",
+                        "image_url" to org.json.JSONObject(mapOf("url" to "data:image/jpeg;base64,$base64"))
+                    )))
+                }
+
+                val messages = org.json.JSONArray().apply {
+                    put(org.json.JSONObject(mapOf("role" to "user", "content" to userContent)))
+                }
+
+                val requestBody = org.json.JSONObject().apply {
+                    put("model", AppConfig.OPENROUTER_MODEL)
+                    put("messages", messages)
+                    put("max_tokens", 10)
+                    put("temperature", 0.0)
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val request = Request.Builder()
+                    .url("https://openrouter.ai/api/v1/chat/completions")
+                    .addHeader("Authorization", "Bearer ${AppConfig.OPENROUTER_API_KEY}")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("HTTP-Referer", "https://github.com/GrowMate-Inc")
+                    .post(requestBody.toString().toRequestBody(mediaType))
+                    .build()
+
+                val response = openRouterClient.newCall(request).execute()
+                val responseBody = response.body?.string()
+                if (response.isSuccessful && responseBody != null) {
+                    val content = org.json.JSONObject(responseBody)
+                        .getJSONArray("choices")
+                        .getJSONObject(0)
+                        .getJSONObject("message")
+                        .getString("content")
+                        .trim()
+                    
+                    Log.d("MainActivity", "verifyStrawberryWithAI response: $content")
+                    content.equals("YES", ignoreCase = true)
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error in verifyStrawberryWithAI", e)
+                false
+            }
+        }
     }
 
     override fun onDestroy() {

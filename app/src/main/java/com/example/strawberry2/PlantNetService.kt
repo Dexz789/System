@@ -73,9 +73,10 @@ class PlantNetService {
                     )
                 }
 
+                println("DEBUG PlantNet: Raw response (first 500 chars): ${responseBody.take(500)}")
                 println("DEBUG PlantNet: Response received, parsing...")
                 val identification = parsePlantNetResponse(responseBody)
-                println("DEBUG PlantNet: Parsed - isStrawberry=${identification.isStrawberry}, confidence=${identification.confidence}")
+                println("DEBUG PlantNet: Parsed - isStrawberry=${identification.isStrawberry}, confidence=${identification.confidence}, name=${identification.scientificName}, common=${identification.commonName}")
 
                 Result.success(identification)
 
