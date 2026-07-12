@@ -47,7 +47,7 @@ class ObjectDetector(context: Context) {
         }
     }
 
-    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.35f): List<Detection> {
+    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.5f): List<Detection> {
         val detections = mutableListOf<Detection>()
 
         try {
@@ -63,35 +63,29 @@ class ObjectDetector(context: Context) {
                 throw RuntimeException("Invalid output shape")
             }
 
-            // The model output shape tells us the format:
-            // [1, channels, predictions] (e.g. [1, 11, 2100]) or [1, predictions, channels] (e.g. [1, 2100, 11])
-            // Always allocate to match the model's actual shape so TensorFlow Lite can copy the data.
-            val outChannels = outputShape[1]
-            val outPredictions = outputShape[2]
-            val output = Array(1) { Array(outChannels) { FloatArray(outPredictions) } }
+            val numChannels = outputShape[1] // Should be 11 (4 bbox + 1 obj + 6 classes)
+            val numPredictions = outputShape[2] // Should be 2100
+
+            // Prepare output array with correct shape
+            val output = Array(1) { Array(numChannels) { FloatArray(numPredictions) } }
 
             // Run inference
             interpreter?.run(inputBuffer, output)
 
-            // Determine actual semantics:
-            // [1, channels, predictions] → outChannels=11, outPredictions=2100 (channels first)
-            // [1, predictions, channels] → outChannels=2100, outPredictions=11 (predictions first)
-            val predictionsFirst = outChannels > outPredictions
-            val numChannels = if (predictionsFirst) outPredictions else outChannels
-            val numPredictions = if (predictionsFirst) outChannels else outPredictions
-
             // Parse YOLOv8 output format
+            // Output format: [batch, channels, predictions]
             // channels = [x, y, w, h, objectness, class1, class2, ..., classN]
-            val raw = output[0]
+            val predictions = output[0]
 
             for (i in 0 until numPredictions) {
                 // Get bounding box coordinates (center format)
-                val x = if (predictionsFirst) raw[i][0] else raw[0][i]
-                val y = if (predictionsFirst) raw[i][1] else raw[1][i]
-                val w = if (predictionsFirst) raw[i][2] else raw[2][i]
-                val h = if (predictionsFirst) raw[i][3] else raw[3][i]
+                val x = predictions[0][i]
+                val y = predictions[1][i]
+                val w = predictions[2][i]
+                val h = predictions[3][i]
 
-                // Determine class start index
+                // Get objectness score (if your model has it at index 4)
+                // Some YOLOv8 models don't have objectness, skip to class scores
                 val hasObjectness = numChannels == labels.size + 5
                 val classStartIndex = if (hasObjectness) 5 else 4
 
@@ -100,7 +94,7 @@ class ObjectDetector(context: Context) {
                 var maxClassIndex = 0
 
                 for (j in classStartIndex until numChannels) {
-                    val classScore = if (predictionsFirst) raw[i][j] else raw[j][i]
+                    val classScore = predictions[j][i]
                     if (classScore > maxScore) {
                         maxScore = classScore
                         maxClassIndex = j - classStartIndex
@@ -139,12 +133,6 @@ class ObjectDetector(context: Context) {
             }
 
             resizedBitmap.recycle()
-
-            // Debug: log if no detections found
-            if (detections.isEmpty()) {
-                println("DEBUG DETECT: shape=[1,$outChannels,$outPredictions] channels=$numChannels predictions=$numPredictions predFirst=$predictionsFirst threshold=$confidenceThreshold")
-                println("DEBUG DETECT: raw[0]=${raw[0].take(12).joinToString()}")
-            }
 
             // Apply Non-Maximum Suppression (NMS) to remove duplicate detections
             val filteredDetections = applyNMS(detections, iouThreshold = 0.45f)
@@ -207,10 +195,10 @@ class ObjectDetector(context: Context) {
             for (j in 0 until inputSize) {
                 val value = intValues[pixel++]
 
-                // Normalize pixel values to [0, 1] — BGR order for YOLO/OpenCV compatibility
-                byteBuffer.putFloat(((value and 0xFF) / 255.0f))
-                byteBuffer.putFloat(((value shr 8 and 0xFF) / 255.0f))
+                // Normalize pixel values to [0, 1]
                 byteBuffer.putFloat(((value shr 16 and 0xFF) / 255.0f))
+                byteBuffer.putFloat(((value shr 8 and 0xFF) / 255.0f))
+                byteBuffer.putFloat(((value and 0xFF) / 255.0f))
             }
         }
 
