@@ -47,7 +47,7 @@ class ObjectDetector(context: Context) {
         }
     }
 
-    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.35f): List<Detection> {
+    fun detect(bitmap: Bitmap, confidenceThreshold: Float = 0.75f): List<Detection> {
         val detections = mutableListOf<Detection>()
 
         try {
@@ -107,19 +107,34 @@ class ObjectDetector(context: Context) {
                     }
                 }
 
-                // Apply confidence threshold
-                if (maxScore >= confidenceThreshold) {
-                    // Convert from center format to corner format
-                    // Scale back to original image size
+                // Debug: log ALL class scores for non-trivial predictions
+                if (maxScore > 0.1f && i < 20) {
+                    val scores = (classStartIndex until numChannels).joinToString(", ") { j ->
+                        val score = if (predictionsFirst) raw[i][j] else raw[j][i]
+                        val idx = j - classStartIndex
+                        "${labels.getOrNull(idx) ?: "c$idx"}=${"%.2f".format(score)}"
+                    }
+                    println("DEBUG RAW: pred=$i best=${labels.getOrNull(maxClassIndex)} score=${"%.3f".format(maxScore)} | $scores")
+                }
+
+                // Use the caller-supplied threshold for all classes uniformly.
+                // The per-class cap (max 2 per class after NMS) prevents spam.
+                // Missing a real disease is worse than an occasional false positive.
+                val detectionLabel = labels.getOrNull(maxClassIndex) ?: ""
+                val effectiveThreshold = confidenceThreshold
+
+                if (maxScore >= effectiveThreshold) {
+                    val topClass = detectionLabel.ifEmpty { "class_$maxClassIndex" }
+                    println("DEBUG DETECT: class=$topClass score=${"%.3f".format(maxScore)} thresh=${"%.2f".format(effectiveThreshold)}")
+
                     val scaleX = bitmap.width.toFloat() / inputSize
                     val scaleY = bitmap.height.toFloat() / inputSize
 
-                    val left = (x - w / 2) * scaleX
-                    val top = (y - h / 2) * scaleY
-                    val right = (x + w / 2) * scaleX
+                    val left   = (x - w / 2) * scaleX
+                    val top    = (y - h / 2) * scaleY
+                    val right  = (x + w / 2) * scaleX
                     val bottom = (y + h / 2) * scaleY
 
-                    // Clamp to image boundaries
                     val boundingBox = RectF(
                         max(0f, left),
                         max(0f, top),
@@ -127,14 +142,7 @@ class ObjectDetector(context: Context) {
                         min(bitmap.height.toFloat(), bottom)
                     )
 
-                    // Get label
-                    val label = if (maxClassIndex < labels.size) {
-                        labels[maxClassIndex]
-                    } else {
-                        "Class $maxClassIndex"
-                    }
-
-                    detections.add(Detection(label, maxScore, boundingBox))
+                    detections.add(Detection(topClass, maxScore, boundingBox))
                 }
             }
 
@@ -147,7 +155,13 @@ class ObjectDetector(context: Context) {
             }
 
             // Apply Non-Maximum Suppression (NMS) to remove duplicate detections
-            val filteredDetections = applyNMS(detections, iouThreshold = 0.45f)
+            val nmsDetections = applyNMS(detections, iouThreshold = 0.30f)
+
+            // Cap at max 2 detections per class to prevent spam on repetitive images
+            val filteredDetections = nmsDetections
+                .groupBy { it.label }
+                .flatMap { (_, group) -> group.take(2) }
+                .sortedByDescending { it.score }
 
             return filteredDetections
 
@@ -207,10 +221,11 @@ class ObjectDetector(context: Context) {
             for (j in 0 until inputSize) {
                 val value = intValues[pixel++]
 
-                // Normalize pixel values to [0, 1] — BGR order for YOLO/OpenCV compatibility
-                byteBuffer.putFloat(((value and 0xFF) / 255.0f))
-                byteBuffer.putFloat(((value shr 8 and 0xFF) / 255.0f))
-                byteBuffer.putFloat(((value shr 16 and 0xFF) / 255.0f))
+                // Normalize pixel values to [0, 1] — RGB order (standard for YOLOv8)
+                // Android getPixels() returns ARGB: bits 16-23 = R, 8-15 = G, 0-7 = B
+                byteBuffer.putFloat(((value shr 16 and 0xFF) / 255.0f)) // Red
+                byteBuffer.putFloat(((value shr 8 and 0xFF) / 255.0f))  // Green
+                byteBuffer.putFloat(((value and 0xFF) / 255.0f))         // Blue
             }
         }
 

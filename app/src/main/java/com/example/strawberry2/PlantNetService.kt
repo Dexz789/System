@@ -39,6 +39,7 @@ class PlantNetService {
                 val imageBytes = stream.toByteArray()
 
                 // Create multipart request body
+                // Send multiple organ types so PlantNet can match leaves, fruit, or flowers
                 val requestBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart(
@@ -46,7 +47,7 @@ class PlantNetService {
                         "image.jpg",
                         imageBytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
                     )
-                    .addFormDataPart("organs", "leaf") // or "fruit" depending on your needs
+                    .addFormDataPart("organs", "auto") // let PlantNet decide the organ type
                     .build()
 
                 // Build request
@@ -120,8 +121,8 @@ class PlantNetService {
 
             println("DEBUG PlantNet: Top result - $scientificName ($firstCommonName) - score: $score")
 
-            // If confidence is very low, treat as "nothing detected"
-            if (score < 0.1f) {
+            // If confidence is extremely low, treat as "nothing detected"
+            if (score < 0.01f) {
                 println("DEBUG PlantNet: Confidence too low ($score), treating as no plant detected")
                 return PlantIdentification(
                     isStrawberry = false,

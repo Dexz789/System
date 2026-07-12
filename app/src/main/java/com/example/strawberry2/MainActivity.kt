@@ -38,6 +38,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
@@ -63,6 +64,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.net.URL
 import kotlin.math.abs
@@ -139,7 +141,7 @@ class MainActivity : AppCompatActivity() {
     private var activeChatView: View? = null
     private lateinit var tutorialManager: TutorialManager
     var isTutorialActive: Boolean = false
-    // Camera capture launcher
+    private var photoUri: Uri? = null
 
 
     // Camera capture launcher
@@ -147,26 +149,43 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val bitmap = result.data?.extras?.get("data") as? Bitmap
-            bitmap?.let {
-                resetFrameResults()
-                selectedBitmap = it
-                tvResults.text = "Analyzing captured image..."
+            // Load the full-resolution photo from the saved file
+            val uri = photoUri
+            if (uri != null) {
+                try {
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (bitmap != null) {
+                        resetFrameResults()
+                        selectedBitmap = bitmap
+                        tvResults.text = "Analyzing captured image..."
 
-                // Clear old detections and reset button
-                currentDetections = null
-                resetSaveButton()
-                updateSaveButtonState()
-                aiInsightsText = null
+                        currentDetections = null
+                        resetSaveButton()
+                        updateSaveButtonState()
+                        aiInsightsText = null
 
-                // ── Tutorial: advance to step 3 ──
-                if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
-                    val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
-                    val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
-                    tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
+                        if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
+                            val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                            val nestedScroll  = findViewById<NestedScrollView>(R.id.nestedScrollView)
+                            tutorialManager.onImageSelected(diagnosisCard, nestedScroll)
+                        }
+
+                        performDetection(bitmap)
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Failed to load photo: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-
-                performDetection(it)
+            } else {
+                // Fallback to thumbnail if no URI
+                val bitmap = result.data?.extras?.get("data") as? Bitmap
+                bitmap?.let {
+                    resetFrameResults()
+                    selectedBitmap = it
+                    tvResults.text = "Analyzing captured image..."
+                    performDetection(it)
+                }
             }
         }
     }
@@ -785,7 +804,7 @@ class MainActivity : AppCompatActivity() {
                     tvResults.text = "Strawberry plant confirmed! Analyzing for diseases..."
 
                     val detections = withContext(Dispatchers.Default) {
-                        detector.detect(bitmap, confidenceThreshold = 0.35f)
+                        detector.detect(bitmap, confidenceThreshold = 0.20f)
                     }
 
                     // IMPORTANT: Store the detections for saving later
@@ -827,8 +846,13 @@ class MainActivity : AppCompatActivity() {
                     val resultsText = buildString {
                         append("⚠ Found ${detections.size} issue(s):\n\n")
                         detections.forEachIndexed { index, detection ->
+                            val severity = when {
+                                detection.score >= 0.70f -> "🔴 High Risk"
+                                detection.score >= 0.40f -> "🟠 Moderate Risk"
+                                else                    -> "🟡 Low Risk"
+                            }
                             append("${index + 1}. ${detection.label}\n")
-                            append("   Confidence: ${String.format("%.1f%%", detection.score * 100)}\n")
+                            append("   Severity: $severity\n")
                             append("   Location: (${detection.boundingBox.left.toInt()}, ")
                             append("${detection.boundingBox.top.toInt()}) to ")
                             append("(${detection.boundingBox.right.toInt()}, ")
@@ -850,29 +874,69 @@ class MainActivity : AppCompatActivity() {
                     consultAI()
 
                 }.onFailure { exception ->
-                    // ⚠️ IMPROVED: PlantNet API failed - be conservative
-                    println("WARNING: PlantNet API failed: ${exception.message}")
+                    // PlantNet API failed (network error, quota, etc.)
+                    // Fall through to disease detection rather than blocking the user
+                    println("WARNING: PlantNet API failed: ${exception.message} — skipping plant verification")
                     exception.printStackTrace()
 
-                    // Don't proceed with disease detection if we can't verify the plant
-                    // This prevents false positives on non-plant images
-                    tvResults.text = buildString {
-                        append("Not a Strawberry Plant\n\n")
-                        append("Please ensure:\n")
-                        append("• The image clearly shows a plant\n")
-                        append("• The plant is a strawberry\n")
-                        append("• The image has good lighting")
+                    Toast.makeText(
+                        this@MainActivity,
+                        "⚠ Plant verification unavailable — running disease scan anyway",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    tvResults.text = "Running disease scan..."
+
+                    val detections = withContext(Dispatchers.Default) {
+                        detector.detect(bitmap, confidenceThreshold = 0.20f)
                     }
 
-                    btnSelectImage.isEnabled = true
-                    currentDetections = null
-                    updateSaveButtonState()
-                    // Don't show Consult AI button when verification fails
-                    btnConsultAI.visibility = View.GONE
-                    // Plant verification failed — prompt user to try again
-                    if (isTutorialActive && ::tutorialManager.isInitialized) {
-                        tutorialManager.onAnalysisRejected()
+                    currentDetections = detections
+
+                    if (detections.isEmpty()) {
+                        tvResults.text = "✓ No diseases detected.\n\n(Plant verification was unavailable)"
+                        btnSelectImage.isEnabled = true
+                        updateSaveButtonState()
+                        if (isTutorialActive && ::tutorialManager.isInitialized) {
+                            val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                            card.post { tutorialManager.onAnalysisComplete() }
+                        }
+                        consultAI()
+                        return@launch
                     }
+
+                    val annotatedBitmap = withContext(Dispatchers.Default) {
+                        drawBoundingBoxes(bitmap, detections)
+                    }
+                    imageView.visibility = View.VISIBLE
+                    imageView.setImageBitmap(annotatedBitmap)
+
+                    val resultsText = buildString {
+                        append("⚠ Found ${detections.size} issue(s):\n\n")
+                        detections.forEachIndexed { index, detection ->
+                            val severity = when {
+                                detection.score >= 0.70f -> "🔴 High Risk"
+                                detection.score >= 0.40f -> "🟠 Moderate Risk"
+                                else                    -> "🟡 Low Risk"
+                            }
+                            append("${index + 1}. ${detection.label}\n")
+                            append("   Severity: $severity\n")
+                            append("   Location: (${detection.boundingBox.left.toInt()}, ")
+                            append("${detection.boundingBox.top.toInt()}) to ")
+                            append("(${detection.boundingBox.right.toInt()}, ")
+                            append("${detection.boundingBox.bottom.toInt()})\n\n")
+                        }
+                    }
+                    tvResults.text = resultsText
+
+                    btnSelectImage.isEnabled = true
+                    updateSaveButtonState()
+
+                    if (isTutorialActive && ::tutorialManager.isInitialized) {
+                        val card = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
+                        card.post { tutorialManager.onAnalysisComplete() }
+                    }
+                    consultAI()
                 }
 
             } catch (e: Exception) {
@@ -907,6 +971,12 @@ class MainActivity : AppCompatActivity() {
     private fun openCamera() {
         val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (cameraIntent.resolveActivity(packageManager) != null) {
+            // Create a temp file for full-resolution photo
+            val captureDir = File(cacheDir, "captures")
+            captureDir.mkdirs()
+            val photoFile = File(captureDir, "strawberry_${System.currentTimeMillis()}.jpg")
+            photoUri = FileProvider.getUriForFile(this, "${packageName}.provider", photoFile)
+            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
             takePictureLauncher.launch(cameraIntent)
         } else {
             Toast.makeText(this, "Camera not available", Toast.LENGTH_SHORT).show()
@@ -986,7 +1056,12 @@ class MainActivity : AppCompatActivity() {
             canvas.drawRect(innerRect, innerBoxPaint)
 
             // Draw label with background (positioned ABOVE the box)
-            val label = "${detection.label} ${String.format("%.0f%%", detection.score * 100)}"
+            val severityTag = when {
+                detection.score >= 0.70f -> "High"
+                detection.score >= 0.40f -> "Mod"
+                else                    -> "Low"
+            }
+            val label = "${detection.label} [$severityTag]"
             val textBounds = android.graphics.Rect()
             textPaint.getTextBounds(label, 0, label.length, textBounds)
 
