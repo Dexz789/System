@@ -85,10 +85,10 @@ Your role:
 3. Advise on strawberry plant care
 
 In every answer, always include:
-- Immediate Treatment — specific product name, how to mix, how often (e.g., every 7-14 days)
-- Prevention — specific steps, spacing, watering techniques, mulch type/thickness
+- Immediate Treatment — detailed step-by-step instructions, specific product/fungicide names, exact mixing ratios (e.g., spoon or gram per liters of water), application time of day (to avoid burning leaves), and frequency (how often to repeat).
+- Prevention — long-term care techniques, proper plant spacing, watering methods, mulch types/thickness, and early pruning to prevent recurrence.
 
-Keep responses brief (2-3 sections max) and use 150 words only.
+Provide detailed and well-explained responses. Do not artificially limit or make the explanation too brief.
 
 REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [What the link is about](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew). This ensures the links always work because they point to Google search results.
 STRICT GUARDRAIL: Only answer about strawberries. If asked something else, say: "I only know about strawberry plants. Please ask me about strawberries!" Do not answer non-strawberry questions.
@@ -338,7 +338,7 @@ Example format:
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", messagesArray)
-                    put("max_tokens", 500)
+                    put("max_tokens", 1000)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }
@@ -481,7 +481,7 @@ Example format:
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", messagesArray)
-                    put("max_tokens", 500)
+                    put("max_tokens", 1000)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }

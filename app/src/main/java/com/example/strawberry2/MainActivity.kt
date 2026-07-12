@@ -80,11 +80,11 @@ class MainActivity : AppCompatActivity() {
             
             IMPORTANT: Always answer in simple, easy-to-understand English. This is for beginners who have no idea how to plant strawberries. Use conversational tone like talking to a friend.
             
-            Keep responses short (maximum 100 words).
+            Provide a detailed, thorough, and well-explained response. Do not artificially limit or make the explanation too brief.
             
             In every answer, always include:
-            - Immediate Treatment — what to do right away, what product to use, how to mix it, how often
-            - Prevention — how to avoid it from coming back, what to do next time
+            - Immediate Treatment — detailed step-by-step instructions, specific product/fungicide names, exact mixing ratios (e.g., spoon or gram per liters of water), application time of day (to avoid burning leaves), and frequency (how often to repeat).
+            - Prevention — long-term care techniques, proper plant spacing, watering methods, mulch types/thickness, and early pruning to prevent recurrence.
             
             Use markdown: bullet points (•) for lists, numbered lists (1. 2. 3.) for steps.
             
@@ -1459,21 +1459,21 @@ Rules:
  
         $diagnosisText
  
-        Provide a BRIEF response (max 100 words) with bullet points covering:
+        Provide a detailed and well-explained response covering:
         1. What a healthy strawberry plant needs to stay disease-free
-        2. Preventive care tips
+        2. Preventive care tips (watering, light, soil)
         3. Signs to watch out for in the future
         """.trimIndent()
         } else {
             """
-        The  detected the following on a strawberry plant:
+        The detector detected the following on a strawberry plant:
  
         $diagnosisText
  
-        Provide a BRIEF analysis (max 100 words) with bullet points covering:
-        1. What this condition means
-        2. Immediate treatment steps
-        3. Prevention tips
+        Provide a detailed and well-explained analysis covering:
+        1. What this condition means and its causes
+        2. Immediate treatment steps (specific remedies, mixing ratios, application schedules)
+        3. Comprehensive prevention tips to avoid recurrence
         """.trimIndent()
         }
 
@@ -1523,7 +1523,7 @@ Rules:
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
                     put("messages", messagesArray)
-                    put("max_tokens", 500)
+                    put("max_tokens", 1000)
                     put("temperature", 0.7)
                     put("top_p", 0.95)
                 }
@@ -1650,7 +1650,7 @@ Rules:
                     val requestBody = JSONObject().apply {
                         put("model", AppConfig.OPENROUTER_MODEL)
                         put("messages", messagesArray)
-                        put("max_tokens", 500)
+                        put("max_tokens", 1000)
                         put("temperature", 0.7)
                         put("top_p", 0.95)
                     }
