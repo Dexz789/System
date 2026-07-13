@@ -10,7 +10,8 @@ data class DiagnosisData(
     val imageUrl: String? = null,
     val totalIssuesFound: Int = 0,
     val aiInsights: String? = null,
-    val embedding: List<Double>? = null
+    val embedding: List<Double>? = null,
+    val chatHistory: List<Map<String, String>>? = null
 
 ) : Serializable {
     fun toMap(): Map<String, Any> {
@@ -24,6 +25,7 @@ data class DiagnosisData(
             "aiInsights" to (aiInsights ?: "")
         )
         embedding?.let { map["embedding"] = it }
+        chatHistory?.let { map["chatHistory"] = it }
         return map as Map<String, Any>
     }
 
@@ -39,7 +41,8 @@ data class DiagnosisData(
                 imageUrl = map["imageUrl"] as? String,
                 totalIssuesFound = (map["totalIssuesFound"] as? Long)?.toInt() ?: 0,
                 aiInsights = map["aiInsights"] as? String,
-                embedding = (map["embedding"] as? List<Double>)
+                embedding = (map["embedding"] as? List<Double>),
+                chatHistory = (map["chatHistory"] as? List<Map<String, String>>)
             )
         }
     }

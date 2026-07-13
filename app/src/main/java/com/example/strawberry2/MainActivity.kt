@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
             3. Spray neem oil (5ml per 1L water) weekly
             4. Use plastic mulch to prevent soil from splashing onto leaves
 
-            STRICT GUARDRAIL: Only answer about strawberries. If asked something else, say: "I only know about strawberry plants. Please ask me about strawberries!" Do not answer non-strawberry questions.
+            STRICT GUARDRAIL: If the question is COMPLETELY unrelated to strawberries or plants (e.g., asking about cars, cooking, coding), say: "I only know about strawberry plants. Please ask me about strawberries!" Otherwise, ALWAYS answer — the user is asking about their strawberry plants.
             REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [Descriptive Link Title](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew) and "Descriptive Link Title" with a short, meaningful description of the search (e.g., "Google Search: Strawberry Powdery Mildew Care"). Do not write the literal text "Descriptive Link Title" or "What the link is about" inside the brackets.
         """.trimIndent()
         private const val RATE_LIMIT_MS = 2000L
@@ -142,6 +142,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tutorialManager: TutorialManager
     var isTutorialActive: Boolean = false
     private var photoUri: Uri? = null
+    private val inlineChatMessages = mutableListOf<ChatMessage>()
 
 
     // Camera capture launcher
@@ -165,6 +166,7 @@ class MainActivity : AppCompatActivity() {
                         resetSaveButton()
                         updateSaveButtonState()
                         aiInsightsText = null
+                        inlineChatMessages.clear()
 
                         if (isTutorialActive && ::tutorialManager.isInitialized && tutorialManager.isWaitingForImage) {
                             val diagnosisCard = findViewById<MaterialCardView>(R.id.cardDiagnosisResult)
@@ -515,12 +517,17 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
+                val chatHistory = inlineChatMessages
+                    .filter { !it.excludeFromHistory }
+                    .map { mapOf("role" to if (it.isUser) "user" else "assistant", "content" to it.message) }
+
                 val diagnosis = DiagnosisData(
                     userId = user.uid,
                     timestamp = System.currentTimeMillis(),
                     detections = detectionResults,
                     totalIssuesFound = detections.size,
-                    aiInsights = aiInsightsText // ✅ include AI insights if available
+                    aiInsights = aiInsightsText,
+                    chatHistory = chatHistory.ifEmpty { null }
                 )
 
                 // IMPORTANT: Pass the annotated bitmap (the one with bounding boxes)
@@ -1440,9 +1447,8 @@ Rules:
         val progressChat: ProgressBar     = chatView.findViewById(R.id.progressChat)
         val btnCloseChat: ImageButton     = chatView.findViewById(R.id.btnCloseChat)
 
-        // Chat list and adapter
-        val chatMessages = mutableListOf<ChatMessage>()
-        val chatAdapter  = ChatAdapter(chatMessages) { aiResponse ->
+        // Chat list and adapter (use class field so saveDiagnosis can access chat history)
+        val chatAdapter  = ChatAdapter(inlineChatMessages) { aiResponse ->
             aiInsightsText = aiResponse
             Toast.makeText(this, "AI insights saved to diagnosis", Toast.LENGTH_SHORT).show()
         }
@@ -1478,7 +1484,7 @@ Rules:
         }
 
         // ── FIX: mark this message so it is NEVER included in follow-up history ──
-        chatMessages.add(
+        inlineChatMessages.add(
             ChatMessage(
                 message            = initialPrompt,
                 isUser             = true,
@@ -1486,8 +1492,8 @@ Rules:
                 excludeFromHistory = true          // ← KEY FIX
             )
         )
-        chatAdapter.notifyItemInserted(chatMessages.size - 1)
-        recyclerChat.scrollToPosition(chatMessages.size - 1)
+        chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+        recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
 
         lastChatMessageTime = System.currentTimeMillis()
         progressChat.visibility  = View.VISIBLE
@@ -1569,29 +1575,29 @@ Rules:
                     "⚠️ AI Error (${httpResponse.code}): ${errorDetail.ifEmpty { httpResponse.message }}"
                 } ?: "I apologize, but I couldn't generate a response."
 
-                chatMessages.add(
+                inlineChatMessages.add(
                     ChatMessage(
                         message    = aiResponseText,
                         isUser     = false,
                         canBeSaved = false
                     )
                 )
-                chatAdapter.notifyItemInserted(chatMessages.size - 1)
-                recyclerChat.scrollToPosition(chatMessages.size - 1)
+                chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+                recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
 
                 aiInsightsText = aiResponseText
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error getting AI response", e)
-                chatMessages.add(
+                inlineChatMessages.add(
                     ChatMessage(
                         message    = "Sorry, I encountered an error: ${e.message}",
                         isUser     = false,
                         canBeSaved = false
                     )
                 )
-                chatAdapter.notifyItemInserted(chatMessages.size - 1)
-                recyclerChat.scrollToPosition(chatMessages.size - 1)
+                chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+                recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
             } finally {
                 progressChat.visibility = View.GONE
                 btnSendChat.isEnabled   = true
@@ -1614,9 +1620,9 @@ Rules:
             }
 
             // Add user message to the list FIRST, then build history from the list
-            chatMessages.add(ChatMessage(messageText, isUser = true))
-            chatAdapter.notifyItemInserted(chatMessages.size - 1)
-            recyclerChat.scrollToPosition(chatMessages.size - 1)
+            inlineChatMessages.add(ChatMessage(messageText, isUser = true))
+            chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+            recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
             etChatMessage.text?.clear()
             aiInsightsText = if (aiInsightsText.isNullOrEmpty()) {
                 "You: $messageText"
@@ -1639,7 +1645,7 @@ Rules:
                         }
                     } catch (_: Exception) { }
 
-                    chatMessages
+                    inlineChatMessages
                         .filter { !it.excludeFromHistory }
                         .takeLast(10)
                         .forEach { msg ->
@@ -1696,29 +1702,29 @@ Rules:
                         "⚠️ AI Error (${httpResponse.code}): ${errorDetail.ifEmpty { httpResponse.message }}"
                     } ?: "I apologize, but I couldn't generate a response."
 
-                    chatMessages.add(
+                    inlineChatMessages.add(
                         ChatMessage(
                             message    = aiResponseText,
                             isUser     = false,
                             canBeSaved = false
                         )
                     )
-                    chatAdapter.notifyItemInserted(chatMessages.size - 1)
-                    recyclerChat.scrollToPosition(chatMessages.size - 1)
+                    chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+                    recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
 
                     aiInsightsText = "$aiInsightsText\n\nAI: $aiResponseText"
 
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error getting AI response", e)
-                    chatMessages.add(
+                    inlineChatMessages.add(
                         ChatMessage(
                             message    = "Sorry, I encountered an error: ${e.message}",
                             isUser     = false,
                             canBeSaved = false
                         )
                     )
-                    chatAdapter.notifyItemInserted(chatMessages.size - 1)
-                    recyclerChat.scrollToPosition(chatMessages.size - 1)
+                    chatAdapter.notifyItemInserted(inlineChatMessages.size - 1)
+                    recyclerChat.scrollToPosition(inlineChatMessages.size - 1)
                 } finally {
                     progressChat.visibility = View.GONE
                     btnSendChat.isEnabled   = true
@@ -1735,6 +1741,7 @@ Rules:
 
                 val btnConsultAI: Button = findViewById(R.id.btnConsultAI)
                 btnConsultAI.visibility  = View.VISIBLE
+                updateSaveButtonState()
 
                 Toast.makeText(this, "Chat closed", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {

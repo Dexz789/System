@@ -179,6 +179,14 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
+        val chatHistoryText = diagnosis.chatHistory?.let { history ->
+            if (history.isEmpty()) return@let null
+            history.joinToString("\n") { msg ->
+                val speaker = if (msg["role"] == "user") "You" else "AI Expert"
+                "$speaker: ${msg["content"]}"
+            }
+        }
+
         return buildString {
             appendLine("=== SAVED DIAGNOSIS CONTEXT ===")
             appendLine()
@@ -189,6 +197,11 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
             appendLine()
             appendLine("--- AI Expert Insight ---")
             appendLine(currentAiInsights.ifBlank { "No insights available." })
+            if (chatHistoryText != null) {
+                appendLine()
+                appendLine("--- Previous Chat History ---")
+                appendLine(chatHistoryText)
+            }
             appendLine()
             appendLine("=== END OF CONTEXT ===")
         }
