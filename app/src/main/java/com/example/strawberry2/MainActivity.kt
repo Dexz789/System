@@ -66,6 +66,9 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.net.URL
 import kotlin.math.abs
 import kotlin.math.min
@@ -105,7 +108,6 @@ class MainActivity : AppCompatActivity() {
             3. Spray neem oil (5ml per 1L water) weekly
             4. Use plastic mulch to prevent soil from splashing onto leaves
 
-            STRICT GUARDRAIL: If the question is COMPLETELY unrelated to strawberries or plants (e.g., asking about cars, cooking, coding), say: "I only know about strawberry plants. Please ask me about strawberries!" Otherwise, ALWAYS answer — the user is asking about their strawberry plants.
             REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [Descriptive Link Title](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew) and "Descriptive Link Title" with a short, meaningful description of the search (e.g., "Google Search: Strawberry Powdery Mildew Care"). Do not write the literal text "Descriptive Link Title" or "What the link is about" inside the brackets.
         """.trimIndent()
         private const val RATE_LIMIT_MS = 2000L
@@ -1788,8 +1790,33 @@ Rules:
 
 
     private fun openChatDialog() {
-        val chatDialog = ChatBottomSheetDialog()
-        chatDialog.show(supportFragmentManager, "ChatBottomSheetDialog")
+        val user = auth.currentUser
+        coroutineScope.launch {
+            val context = if (user != null) {
+                try {
+                    val diagnoses = withContext(Dispatchers.IO) {
+                        diagnosisRepository.getUserDiagnoses(user.uid)
+                    }
+                    diagnoses.getOrNull()?.take(3)?.joinToString("\n\n---\n\n") { diag ->
+                        val detections = diag.detections.joinToString(", ") {
+                            "${it.label} (${(it.confidence * 100).toInt()}%)"
+                        }
+                        buildString {
+                            appendLine("Date: ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(diag.timestamp))}")
+                            appendLine("Detections: $detections")
+                            if (!diag.aiInsights.isNullOrBlank()) {
+                                appendLine("Analysis: ${diag.aiInsights.take(300)}")
+                            }
+                        }
+                    }.let { if (it.isNullOrBlank()) null else "=== YOUR PAST DIAGNOSES ===\n\n$it\n\n=== END OF PAST DIAGNOSES ===" }
+                } catch (_: Exception) { null }
+            } else null
+
+            val chatDialog = ChatBottomSheetDialog.newInstance(
+                diagnosisContext = context
+            )
+            chatDialog.show(supportFragmentManager, "ChatBottomSheetDialog")
+        }
     }
     // ── Tutorial ──────────────────────────────────────────────────────────────────
 

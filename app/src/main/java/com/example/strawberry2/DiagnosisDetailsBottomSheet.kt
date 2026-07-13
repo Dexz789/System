@@ -216,6 +216,7 @@ class DiagnosisDetailsBottomSheet : BottomSheetDialogFragment() {
         val chatDialog = ChatBottomSheetDialog.newInstance(
             diagnosisContext = buildDiagnosisContext(),
             image = loadedImageBitmap,
+            chatHistory = diagnosis.chatHistory,
             onConversationEnded = { transcript ->
                 // Append the new transcript to the running insights
                 currentAiInsights = if (currentAiInsights.isNotBlank()) {

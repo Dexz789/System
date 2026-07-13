@@ -42,7 +42,9 @@ data class DiagnosisData(
                 totalIssuesFound = (map["totalIssuesFound"] as? Long)?.toInt() ?: 0,
                 aiInsights = map["aiInsights"] as? String,
                 embedding = (map["embedding"] as? List<Double>),
-                chatHistory = (map["chatHistory"] as? List<Map<String, String>>)
+                chatHistory = (map["chatHistory"] as? List<Map<String, Any>>)?.map { entry ->
+                    entry.mapValues { it.value.toString() }
+                }
             )
         }
     }

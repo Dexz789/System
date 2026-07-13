@@ -56,6 +56,7 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
     private var diagnosisContext: String? = null
     private var onAiResponseSaved: ((String) -> Unit)? = null
     private var lastMessageTime = 0L
+    private var chatHistoryFromSaved: List<Map<String, String>>? = null
 
     /**
      * Called when the user closes the chat if there are any meaningful messages in the
@@ -72,6 +73,7 @@ class ChatBottomSheetDialog : BottomSheetDialogFragment() {
             .build()
         private const val ARG_INITIAL_MESSAGE = "initial_message"
         private const val ARG_DIAGNOSIS_CONTEXT = "diagnosis_context"
+        private const val ARG_CHAT_HISTORY = "chat_history"
 
         private const val SYSTEM_PROMPT = """You are an expert agricultural AI assistant that knows about strawberry plants and diseases.
 
@@ -91,7 +93,6 @@ In every answer, always include:
 Provide detailed and well-explained responses. Do not artificially limit or make the explanation too brief.
 
 REFERENCES: At the end, include 2-3 search links for further reading about the specific disease/topic. Use this format for each link: "- [Descriptive Link Title](https://www.google.com/search?q=strawberry+{disease_name}+treatment+Philippines)". Replace {disease_name} with the actual disease (e.g., powdery+mildew) and "Descriptive Link Title" with a short, meaningful description of the search (e.g., "Google Search: Strawberry Powdery Mildew Care"). Do not write the literal text "Descriptive Link Title" or "What the link is about" inside the brackets.
-STRICT GUARDRAIL: If the question is COMPLETELY unrelated to strawberries or plants (e.g., asking about cars, cooking, coding), say: "I only know about strawberry plants. Please ask me about strawberries!" Otherwise, ALWAYS answer — the user is asking about their strawberry plants.
 
 Example format:
 
@@ -116,12 +117,18 @@ Example format:
             image: Bitmap? = null,
             diagnosisContext: String? = null,
             onAiResponseSaved: ((String) -> Unit)? = null,
-            onConversationEnded: ((String) -> Unit)? = null
+            onConversationEnded: ((String) -> Unit)? = null,
+            chatHistory: List<Map<String, String>>? = null
         ): ChatBottomSheetDialog {
             val fragment = ChatBottomSheetDialog()
             val args = Bundle()
             initialMessage?.let { args.putString(ARG_INITIAL_MESSAGE, it) }
             diagnosisContext?.let { args.putString(ARG_DIAGNOSIS_CONTEXT, it) }
+            chatHistory?.let {
+                val list = ArrayList<HashMap<String, String>>()
+                it.forEach { map -> list.add(HashMap(map)) }
+                args.putSerializable(ARG_CHAT_HISTORY, list)
+            }
             fragment.arguments = args
             fragment.diagnosisImage = image
             fragment.onAiResponseSaved = onAiResponseSaved
@@ -135,6 +142,9 @@ Example format:
         arguments?.let {
             initialMessage = it.getString(ARG_INITIAL_MESSAGE)
             diagnosisContext = it.getString(ARG_DIAGNOSIS_CONTEXT)
+            @Suppress("UNCHECKED_CAST")
+            chatHistoryFromSaved = (it.getSerializable(ARG_CHAT_HISTORY) as? ArrayList<HashMap<String, String>>)
+                ?.map { map -> map.mapValues { it.value as String } }
         }
     }
 
@@ -266,9 +276,27 @@ Example format:
     }
 
     private fun sendContextAwareWelcomeMessage(context: String) {
+        // Pre-populate chat with saved conversation history so AI has full context
+        chatHistoryFromSaved?.forEach { msg ->
+            val role = msg["role"]
+            val content = msg["content"] ?: return@forEach
+            if (role == "user") {
+                messages.add(ChatMessage(content, isUser = true))
+            } else {
+                messages.add(ChatMessage(content, isUser = false, canBeSaved = false))
+            }
+        }
+        chatAdapter.notifyDataSetChanged()
+        scrollToBottom()
+
         // Parse detections from context for a personalized greeting
         val hasDetections = context.contains("•") && !context.contains("No diseases detected")
-        val greeting = if (hasDetections) {
+        val hasHistory = messages.isNotEmpty()
+        val greeting = if (hasDetections && hasHistory) {
+            "Hello! 🍓 I've loaded your saved diagnosis report.\n\n" +
+                    "You can see your **previous conversation** above. " +
+                    "Ask me anything — follow-up questions, treatment options, prevention tips, or anything else about these findings!"
+        } else if (hasDetections) {
             "Hello! 🍓 I've loaded your saved diagnosis report.\n\n" +
                     "I can see the **detections and AI insights** from this scan. " +
                     "Ask me anything — follow-up questions, treatment options, prevention tips, or anything else about these findings!"
@@ -453,15 +481,10 @@ Example format:
                     }
                 } catch (_: Exception) { }
 
-                // ── Inject saved diagnosis context when coming from history ──
-                if (!diagnosisContext.isNullOrEmpty()) {
-                    messagesArray.put(JSONObject(mapOf(
-                        "role" to "system",
-                        "content" to "IMPORTANT CONTEXT — The user is asking follow-up questions about a previously saved diagnosis. Use the details below as the reference for this entire conversation:\n\n$diagnosisContext"
-                    )))
-                }
-
                 // Include last 4 messages for conversational context (avoid token limits)
+                val contextPrefix = if (!diagnosisContext.isNullOrEmpty()) {
+                    "[CONTEXT FROM YOUR SAVED DIAGNOSIS]\n$diagnosisContext\n\n[/CONTEXT]\n\n"
+                } else ""
                 val recentMessages = messages
                     .filter {
                         !it.message.contains("Hello! 🍓") &&
@@ -475,8 +498,13 @@ Example format:
                     messagesArray.put(JSONObject(mapOf("role" to role, "content" to msg.message)))
                 }
 
-                // Current user message
-                messagesArray.put(JSONObject(mapOf("role" to "user", "content" to userMessage)))
+                // Current user message with context prepended
+                val augmentedMessage = if (contextPrefix.isNotEmpty()) {
+                    "$contextPrefix$userMessage"
+                } else {
+                    userMessage
+                }
+                messagesArray.put(JSONObject(mapOf("role" to "user", "content" to augmentedMessage)))
 
                 val requestBody = JSONObject().apply {
                     put("model", AppConfig.OPENROUTER_MODEL)
