@@ -71,84 +71,84 @@ class Plant : AppCompatActivity() {
             title = "Choose the Right Variety",
             description = "Select strawberry varieties suited to your climate. June-bearing varieties produce one large crop, while everbearing varieties produce throughout the season.",
             icon = "🍓",
-            videoId = "l9klMOlofew"
+            videoId = "a1VSY8epFc4"
         ),
         PlantingStep(
             stepNumber = 2,
             title = "Select the Perfect Location",
             description = "Choose a spot with full sun (6-8 hours daily) and good air circulation. Ensure the soil drains well to prevent root rot.",
             icon = "☀️",
-            videoId = "v45c5o1SF7A"
+            videoId = "LDJujafDLHI"
         ),
         PlantingStep(
             stepNumber = 3,
             title = "Prepare the Soil",
             description = "Test soil pH (ideal: 5.5-6.5). Mix in 2-3 inches of compost or aged manure. Add organic fertilizer rich in phosphorus for root development.",
             icon = "🌱",
-            videoId = "LhJfrN76K2s"
+            videoId = "HtgmBzUcGU0"
         ),
         PlantingStep(
             stepNumber = 4,
             title = "Timing is Key",
             description = "Plant in early spring (after last frost) or fall. In tropical climates, plant during the cooler months for best results.",
             icon = "📅",
-            videoId = "wvH7wjMjuNo"
+            videoId = "1qUGiEtKHCo"
         ),
         PlantingStep(
             stepNumber = 5,
             title = "Proper Spacing",
             description = "Space plants 12-18 inches apart in rows 3-4 feet apart. This allows proper air circulation and room for runners.",
             icon = "📏",
-            videoId = "G_bpjmFJ4Q4"
+            videoId = "n7Pj4ozxT_I"
         ),
         PlantingStep(
             stepNumber = 6,
             title = "Plant at the Right Depth",
             description = "Plant so the crown (where leaves meet roots) is at soil level. Roots should spread out and down. Don't bury the crown or leave roots exposed.",
             icon = "🌿",
-            videoId = "fMtLqqoD14s"
+            videoId = "7Oj6Ol0m6RU"
         ),
         PlantingStep(
             stepNumber = 7,
             title = "Water Immediately",
             description = "Water thoroughly after planting. Keep soil consistently moist (not waterlogged) during the first few weeks to establish roots.",
             icon = "💧",
-            videoId = "cGt4rnkEoEE"
+            videoId = "v2sbtETv-1c"
         ),
         PlantingStep(
             stepNumber = 8,
             title = "Apply Mulch",
             description = "Add 2-3 inches of straw or pine needle mulch around plants. This conserves moisture, suppresses weeds, and keeps fruit clean.",
             icon = "🍂",
-            videoId = "-49m8bZRIWc"
+            videoId = "v8xovIsLelE"
         ),
         PlantingStep(
             stepNumber = 9,
             title = "Remove First Flowers",
             description = "For the first 4-6 weeks, pinch off flowers to encourage root and leaf growth instead of fruit production.",
             icon = "🌸",
-            videoId = "r6H7H2vau1c"
+            videoId = "NzKfI8_UXGc"
         ),
         PlantingStep(
             stepNumber = 10,
             title = "Fertilize Regularly",
             description = "Apply balanced fertilizer (10-10-10) monthly during growing season. Switch to low-nitrogen fertilizer when flowering begins.",
             icon = "🥄",
-            videoId = "cMRfcpSIKis"
+            videoId = "h-sYtzi_zz4"
         ),
         PlantingStep(
             stepNumber = 11,
             title = "Manage Runners",
             description = "Trim excess runners to keep plants productive. Leave 2-3 daughter plants per mother plant for renewal, remove others.",
             icon = "✂️",
-            videoId = "zVAO1r7Tn0I"
+            videoId = "iXTQl5UHyrY"
         ),
         PlantingStep(
             stepNumber = 12,
             title = "Harvest Time! 🎉",
             description = "June-bearing varieties: Harvest 4-6 weeks after flowering (typically late spring/early summer).\n\nEverbearing varieties: First harvest in 8-10 weeks, then continuously.\n\nFrom planting to first harvest: 4-6 months depending on variety and conditions.\n\nPick berries when fully red, every 2-3 days during peak season.",
             icon = "🧺",
-            videoId = "XnXjvIn7P2k"
+            videoId = "SyG0guzmk7w"
         )
     )
 
